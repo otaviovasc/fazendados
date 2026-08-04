@@ -1,0 +1,4 @@
+interface:
+  display_name: "FazenDados Application Patterns"
+  short_description: "Transações, logs e observabilidade"
+  default_prompt: "Use $fazendados-application-patterns para implementar ou revisar comandos, transações e observabilidade."

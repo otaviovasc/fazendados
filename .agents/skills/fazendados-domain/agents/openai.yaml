@@ -1,0 +1,4 @@
+interface:
+  display_name: "FazenDados Domain"
+  short_description: "Regras e ontologia do domínio rural"
+  default_prompt: "Use $fazendados-domain para modelar ou revisar uma mudança de domínio do FazenDados."

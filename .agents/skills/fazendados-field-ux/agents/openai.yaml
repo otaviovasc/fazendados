@@ -1,0 +1,4 @@
+interface:
+  display_name: "FazenDados Field UX"
+  short_description: "UX móvel simples para operação rural"
+  default_prompt: "Use $fazendados-field-ux para projetar ou revisar um fluxo móvel do FazenDados."

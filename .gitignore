@@ -1,0 +1,36 @@
+# Dependências do Node/pnpm
+node_modules/
+.pnpm-store/
+
+# Variáveis de ambiente e segredos locais
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Artefatos de build e bundlers (Vite/TypeScript)
+dist/
+.vite/
+.cache/
+coverage/
+.nyc_output/
+*.tsbuildinfo
+
+# Logs e arquivos temporários de gerenciadores de pacotes
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Dados locais de ferramentas e do workspace
+.codebase-memory/
+
+# Sistema operacional e editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
