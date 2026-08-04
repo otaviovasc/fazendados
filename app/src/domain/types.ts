@@ -49,6 +49,13 @@ export interface AnimalGroupAssignment {
 // ---------- Espaço ----------
 export type LatLng = [number, number];
 
+export interface FarmBoundary {
+  id: string;
+  farmId: string;
+  name: string;
+  polygon: LatLng[];
+}
+
 export interface Pasture {
   id: string;
   farmId: string;
@@ -173,7 +180,8 @@ export type ProposalKind =
   | "controle_leiteiro"
   | "coleta"
   | "trato"
-  | "lancamento_financeiro";
+  | "lancamento_financeiro"
+  | "desconhecida";
 
 export type ProposalStatus = "pendente" | "confirmada" | "descartada";
 
@@ -217,6 +225,7 @@ export interface AuditEvent {
 export interface FarmState {
   farm: Farm;
   user: User;
+  farmBoundary: FarmBoundary | null;
   animals: Animal[];
   groups: HerdGroup[];
   assignments: AnimalGroupAssignment[];

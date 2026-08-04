@@ -27,7 +27,6 @@ import {
   Field,
   inputCls,
 } from "../../components/ui";
-import { materializeProposal, type RowBinding } from "./materialize";
 import {
   guessNewAnimal,
   matchAnimalLabel,
@@ -317,32 +316,24 @@ export function ReviewSheet({
           ? rows.map((r) => `${r.rawLabel} ${r.value}`).join(" · ")
           : f.value,
     }));
-    const bindings: RowBinding[] | undefined = rows
+    const bindings = rows
       ? rows
           .filter((r) => r.animalId !== null && parseDecimal(r.value) !== null)
           .map((r) => ({ animalId: r.animalId!, liters: parseDecimal(r.value)! }))
-      : undefined;
-    const result = await materializeProposal(dispatch, state, proposal, finalFields, bindings);
-    if (result.facts === 0) {
-      setBusy(false);
-      setMaterializeError(result.summary || null);
-      return; // nada confirmado: a pessoa corrige na Revisão e tenta de novo
-    }
+          : undefined;
     const confirmed = await dispatch({
       type: "ConfirmAssistantProposal",
       proposalId: proposal.id,
-      recordIds: result.recordIds.filter(Boolean),
+      fields: finalFields,
+      bindings,
     });
     if (!confirmed.ok) {
-      // Os fatos já foram criados: não deixar reconfirmar às cegas
-      // (repetir a materialização duplicaria registros).
       setBusy(false);
-      setMaterializeError(
-        `Os registros foram criados, mas não consegui fechar a proposta — ${confirmed.message} Saia da Revisão e confira o Registro antes de tentar de novo.`
-      );
+      setMaterializeError(confirmed.message);
       return;
     }
-    onConfirmed(proposal, result.summary);
+    const result = confirmed.result as { summary?: string } | null;
+    onConfirmed(proposal, result?.summary ?? "Proposta confirmada.");
   };
 
   const dismiss = () => {
@@ -690,7 +681,7 @@ export function ReviewSheet({
                                 </button>
                               </div>
                               {cadastro?.row === i && (
-                                <div className="mt-2 rounded-xl bg-white border border-black/10 p-3 space-y-2">
+                                <div className="mt-3 space-y-2 border-t border-black/5 pt-3">
                                   <Field label="Nome do animal">
                                     <input
                                       className={inputCls}

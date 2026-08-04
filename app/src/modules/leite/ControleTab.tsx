@@ -178,6 +178,45 @@ function GroupCard({
         </Chip>
       </div>
 
+      {/* Totais por turno + ação de registrar */}
+      <div className="px-4 py-3 md:px-5 border-b border-black/5 space-y-2">
+        {shifts.map((sh, i) => {
+          const session = sessions[i];
+          const total = session ? sessionTotal(state, session.id) : null;
+          const missing = !session || session.status !== "concluido";
+          return (
+            <div key={sh} className="flex items-center gap-3">
+              <div className="flex-1 min-w-0 flex items-baseline gap-2">
+                <p className="text-sm text-ink-soft capitalize">
+                  {SHIFT_LABEL[sh]}
+                </p>
+                {session?.status === "em_andamento" && (
+                  <Chip tone="pendente">em andamento</Chip>
+                )}
+              </div>
+              {total !== null ? (
+                <p className="tnum text-sm font-semibold">
+                  {formatLiters(total)}
+                </p>
+              ) : (
+                <AbsentValue />
+              )}
+              {missing && animals.length > 0 && (
+                <Button
+                  variant="secondary"
+                  onClick={() => onStartWalk(group.id, sh)}
+                >
+                  <Play size={14} />
+                  {session?.status === "em_andamento"
+                    ? "Continuar"
+                    : `Registrar ${SHIFT_SHORT[sh]}`}
+                </Button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
       {animals.length === 0 ? (
         <p className="px-4 py-4 md:px-5 text-sm text-ink-soft">
           Nenhum animal ativo neste Lote.
@@ -235,45 +274,6 @@ function GroupCard({
           </div>
         </div>
       )}
-
-      {/* Totais por turno + ação de registrar */}
-      <div className="px-4 py-3 md:px-5 border-t border-black/5 space-y-2">
-        {shifts.map((sh, i) => {
-          const session = sessions[i];
-          const total = session ? sessionTotal(state, session.id) : null;
-          const missing = !session || session.status !== "concluido";
-          return (
-            <div key={sh} className="flex items-center gap-3">
-              <div className="flex-1 min-w-0 flex items-baseline gap-2">
-                <p className="text-sm text-ink-soft capitalize">
-                  {SHIFT_LABEL[sh]}
-                </p>
-                {session?.status === "em_andamento" && (
-                  <Chip tone="pendente">em andamento</Chip>
-                )}
-              </div>
-              {total !== null ? (
-                <p className="tnum text-sm font-semibold">
-                  {formatLiters(total)}
-                </p>
-              ) : (
-                <AbsentValue />
-              )}
-              {missing && animals.length > 0 && (
-                <Button
-                  variant="secondary"
-                  onClick={() => onStartWalk(group.id, sh)}
-                >
-                  <Play size={14} />
-                  {session?.status === "em_andamento"
-                    ? "Continuar"
-                    : `Registrar ${SHIFT_SHORT[sh]}`}
-                </Button>
-              )}
-            </div>
-          );
-        })}
-      </div>
     </Card>
   );
 }

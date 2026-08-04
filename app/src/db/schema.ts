@@ -1,5 +1,6 @@
 import {
   date,
+  customType,
   index,
   integer,
   jsonb,
@@ -12,18 +13,27 @@ import {
 } from 'drizzle-orm/pg-core';
 import type {
   InstallationType,
-  LatLng,
   ProposalField,
 } from '../domain/types.js';
+
+const polygonGeometry = customType<{ data: string; driverData: string }>({
+  dataType() {
+    return 'geometry(Polygon,4326)';
+  },
+});
+
+const pointGeometry = customType<{ data: string; driverData: string }>({
+  dataType() {
+    return 'geometry(Point,4326)';
+  },
+});
 
 // ---------------------------------------------------------------------------
 // FazenDados — modelo físico V1.
 // Uma Fazenda é dona de tudo: toda tabela operacional tem farm_id.
 // V1 = um User por Farm (users.farm_id UNIQUE).
 //
-// NOTA (milestone futuro): pastos/instalações guardam coordenadas como JSONB
-// ([lat,lng][] e [lat,lng]). A migração para PostGIS geometry/geography fica
-// para um milestone posterior, junto com consultas espaciais.
+// Geometrias oficiais usam PostGIS; GeoJSON só atravessa a API/UI.
 // ---------------------------------------------------------------------------
 
 export const farms = pgTable('farms', {
@@ -110,6 +120,19 @@ export const animalGroupAssignments = pgTable(
 
 // ---------- Espaço ----------
 
+export const farmBoundaries = pgTable(
+  'farm_boundaries',
+  {
+    id: text('id').primaryKey(),
+    farmId: text('farm_id')
+      .notNull()
+      .references(() => farms.id),
+    name: text('name').notNull(),
+    boundary: polygonGeometry('boundary').notNull(),
+  },
+  (t) => [uniqueIndex('farm_boundaries_farm_unique').on(t.farmId)],
+);
+
 export const pastures = pgTable(
   'pastures',
   {
@@ -118,8 +141,7 @@ export const pastures = pgTable(
       .notNull()
       .references(() => farms.id),
     name: text('name').notNull(),
-    // PostGIS geometry em milestone futuro; por ora JSONB [lat,lng][].
-    polygon: jsonb('polygon').$type<LatLng[]>().notNull(),
+    polygon: polygonGeometry('polygon').notNull(),
   },
   (t) => [index('pastures_farm_id_idx').on(t.farmId)],
 );
@@ -133,7 +155,7 @@ export const installations = pgTable(
       .references(() => farms.id),
     name: text('name').notNull(),
     type: text('type').$type<InstallationType>().notNull(),
-    point: jsonb('point').$type<LatLng>().notNull(),
+    point: pointGeometry('point').notNull(),
   },
   (t) => [index('installations_farm_id_idx').on(t.farmId)],
 );

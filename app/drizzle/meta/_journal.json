@@ -8,6 +8,13 @@
       "when": 1785866070444,
       "tag": "0000_giant_colossus",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785866070445,
+      "tag": "0001_postgis_real_map",
+      "breakpoints": true
     }
   ]
 }

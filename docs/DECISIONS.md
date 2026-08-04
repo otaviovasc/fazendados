@@ -91,9 +91,9 @@ confirmados continuam sendo os fatos oficiais.
 Limites da Fazenda e Pastos são polígonos; Instalações começam como pontos. A
 persistência usa tipos `geometry` do PostGIS, e GeoJSON fica restrito ao
 transporte na API. Isso permite validar, indexar e consultar geometrias sem
-esconder estrutura espacial em JSONB. **Atualização:** no protótipo e no backend
-atual a geometria usa JSONB; a migração para PostGIS ocorre no Marco 6 (ver
-D-031 e `docs/IMPLEMENTATION_PLAN.md`).
+esconder estrutura espacial em JSONB. A migration `0001_postgis_real_map`
+converte as geometrias legadas, valida SRID 4326 e cria índices GiST; qualquer
+geometria inválida aborta a migration.
 
 ### D-017 — Nome do produto
 
@@ -193,10 +193,12 @@ sobre imagem de satélite. Sem gamificação no V1.
 ### D-031 — Stack, autenticação e empacotamento
 
 Monólito Hono + PostgreSQL + Drizzle; frontend Vite + React 19 + Tailwind;
-Docker via docker-compose (db `postgres:17` + app); autenticação por senha
+Docker via docker-compose apenas para o banco PostGIS 17; a aplicação roda por
+comando no terminal; autenticação por senha
 (`APP_PASSWORD`) com sessão em cookie (resolve P-006); seed manipulável
-(`pnpm db:seed`). Geometria espacial usa JSONB no protótipo; PostGIS entra no
-Marco 6. O backend já está implementado em `fazendados/app` (22 tabelas, API
+(`pnpm db:seed`). O banco usa PostGIS com `geometry(Polygon,4326)` para
+Perímetro/Pastos e `geometry(Point,4326)` para Instalações; GeoJSON fica apenas
+no transporte. O backend já está implementado em `fazendados/app` (23 tabelas, API
 `/api/bootstrap` + `/api/commands` com idempotência e auditoria transacional).
 
 ### D-032 — Descontinuados no V1
@@ -205,6 +207,16 @@ Além do já decidido em D-002, ficam definitivamente fora do V1: Peso, Cio,
 Mastite, Plantio, Reprodução, Parentesco, genealogia e genômica. O vínculo
 automático compra → estoque → despesa também está fora do V1 (P-004 resolvido:
 não se aplica).
+
+### D-033 — Provider do Assistente e fronteira de interpretação
+
+O Assistente usa OpenRouter via Chat Completions, com modelo configurável por
+ambiente. O provider recebe a Captura e contexto somente de rótulos atuais da
+Fazenda; devolve intents JSON validadas e pode fazer uma segunda tentativa de
+reparo quando o formato vier inválido. A conversão para Propostas é
+determinística, pode gerar várias Propostas para uma Captura e nunca envia IDs
+internos ao modelo. LLM, Captura, Proposta, Revisão e Confirmação permanecem
+separados; a Confirmação continua sendo a única etapa que cria fatos.
 
 ## Pendentes
 

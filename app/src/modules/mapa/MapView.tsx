@@ -9,7 +9,7 @@ import {
 } from "./space";
 import "./mapa.css";
 
-export type MapMode = "idle" | "draw" | "place";
+export type MapMode = "idle" | "draw" | "boundary" | "place";
 
 const SATELLITE_URL =
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
@@ -88,7 +88,10 @@ export function MapView({
     });
 
     // Enquadramento inicial nos pastos.
-    const pts = state.pastures.flatMap((p) => p.polygon);
+    const pts = [
+      ...(state.farmBoundary?.polygon ?? []),
+      ...state.pastures.flatMap((p) => p.polygon),
+    ];
     if (pts.length > 0) {
       map.fitBounds(L.latLngBounds(pts), { padding: [24, 24] });
     } else {
@@ -163,12 +166,27 @@ export function MapView({
     // Novo pasto desenhado pode sair do enquadramento atual.
     if (pastureCountRef.current !== state.pastures.length) {
       pastureCountRef.current = state.pastures.length;
-      const pts = state.pastures.flatMap((p) => p.polygon);
+      const pts = [
+        ...(state.farmBoundary?.polygon ?? []),
+        ...state.pastures.flatMap((p) => p.polygon),
+      ];
       if (pts.length > 0) {
         map.fitBounds(L.latLngBounds(pts), { padding: [24, 24] });
       }
     }
-  }, [state, state.pastures, state.installations, state.occupancies, state.groups]);
+    if (state.farmBoundary) {
+      L.polygon(state.farmBoundary.polygon, {
+        color: REVIEW_500,
+        weight: 2,
+        dashArray: "8 6",
+        fill: false,
+        interactive: false,
+      }).bindTooltip(`${state.farmBoundary.name} · perímetro`, {
+        permanent: false,
+        direction: "center",
+      }).addTo(layers);
+    }
+  }, [state, state.farmBoundary, state.pastures, state.installations, state.occupancies, state.groups]);
 
   // ---------- Camadas de desenho/posicionamento ----------
   useEffect(() => {
@@ -176,7 +194,7 @@ export function MapView({
     if (!layers) return;
     layers.clearLayers();
 
-    if (mode === "draw") {
+    if (mode === "draw" || mode === "boundary") {
       for (const pt of drawPoints) {
         L.circleMarker(pt, {
           radius: 5,

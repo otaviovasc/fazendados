@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   Archive,
   ArrowRightLeft,
   ChevronLeft,
+  Pencil,
   History,
   Milk,
 } from "lucide-react";
@@ -22,6 +23,7 @@ import {
   PageHeader,
   SectionTitle,
   Sheet,
+  SuccessNotice,
   UnsavedFooter,
   inputCls,
   useUnsavedGuard,
@@ -95,7 +97,7 @@ export default function AnimalPage() {
       <div className="lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
         <div>
           <DesempenhoCard animalId={animal.id} />
-          {animal.status === "ativo" && <AcoesCard animalId={animal.id} />}
+          <AcoesCard animalId={animal.id} />
         </div>
         <LinhaDoTempo animalId={animal.id} />
       </div>
@@ -219,22 +221,40 @@ function DesempenhoCard({ animalId }: { animalId: string }) {
 // ---------- Ações ----------
 
 function AcoesCard({ animalId }: { animalId: string }) {
+  const { state } = useFarm();
+  const animal = state.animals.find((item) => item.id === animalId);
   const [moverOpen, setMoverOpen] = useState(false);
   const [arquivarOpen, setArquivarOpen] = useState(false);
+  const [editarOpen, setEditarOpen] = useState(false);
+
+  if (!animal) return null;
 
   return (
     <div className="mb-6">
       <SectionTitle>Ações</SectionTitle>
       <Card className="p-4 flex flex-col sm:flex-row gap-2">
-        <Button variant="secondary" onClick={() => setMoverOpen(true)}>
-          <ArrowRightLeft size={16} />
-          Mover de lote
+        <Button variant="secondary" onClick={() => setEditarOpen(true)}>
+          <Pencil size={16} />
+          Editar dados
         </Button>
-        <Button variant="danger" onClick={() => setArquivarOpen(true)}>
-          <Archive size={16} />
-          Arquivar
-        </Button>
+        {animal.status === "ativo" && (
+          <>
+            <Button variant="secondary" onClick={() => setMoverOpen(true)}>
+              <ArrowRightLeft size={16} />
+              Mover de lote
+            </Button>
+            <Button variant="danger" onClick={() => setArquivarOpen(true)}>
+              <Archive size={16} />
+              Arquivar
+            </Button>
+          </>
+        )}
       </Card>
+      <EditarAnimalSheet
+        animal={animal}
+        open={editarOpen}
+        onClose={() => setEditarOpen(false)}
+      />
       <MoverDeLoteSheet
         animalId={animalId}
         open={moverOpen}
@@ -246,6 +266,114 @@ function AcoesCard({ animalId }: { animalId: string }) {
         onClose={() => setArquivarOpen(false)}
       />
     </div>
+  );
+}
+
+function EditarAnimalSheet({
+  animal,
+  open,
+  onClose,
+}: {
+  animal: { id: string; name: string; tag?: string };
+  open: boolean;
+  onClose: () => void;
+}) {
+  const { dispatch } = useFarm();
+  const [name, setName] = useState(animal.name);
+  const [tag, setTag] = useState(animal.tag ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  const reset = () => {
+    setName(animal.name);
+    setTag(animal.tag ?? "");
+    setBusy(false);
+    setError(null);
+    setSuccess(false);
+  };
+
+  useEffect(() => {
+    if (open) reset();
+  }, [open]);
+
+  const dirty = !success && (name.trim() !== animal.name || tag.trim() !== (animal.tag ?? ""));
+  const guard = useUnsavedGuard(dirty, () => {
+    reset();
+    onClose();
+  });
+
+  const close = () => {
+    reset();
+    onClose();
+  };
+
+  const submit = async () => {
+    const nextName = name.trim();
+    if (!nextName || busy) return;
+    setBusy(true);
+    setError(null);
+    const outcome = await dispatch({
+      type: "UpdateAnimal",
+      animalId: animal.id,
+      name: nextName,
+      tag: tag.trim() || undefined,
+    });
+    setBusy(false);
+    if (!outcome.ok) {
+      setError(outcome.message);
+      return;
+    }
+    setSuccess(true);
+  };
+
+  return (
+    <Sheet
+      open={open}
+      onClose={success ? close : guard.requestClose}
+      title="Editar dados do animal"
+      footer={
+        guard.asking ? (
+          <UnsavedFooter onKeepEditing={guard.keepEditing} onDiscard={guard.discard} />
+        ) : success ? (
+          <Button className="w-full" onClick={close}>
+            Concluído
+          </Button>
+        ) : (
+          <Button className="w-full" onClick={submit} disabled={!name.trim() || busy || !dirty}>
+            {busy ? "Salvando…" : "Salvar alterações"}
+          </Button>
+        )
+      }
+    >
+      <div className="flex flex-col gap-4">
+        {error && <InlineError>{error}</InlineError>}
+        <SuccessNotice
+          message={success ? "Dados do Animal atualizados." : null}
+          onDismiss={() => setSuccess(false)}
+        />
+        <Field label="Nome">
+          <input
+            className={inputCls}
+            value={name}
+            disabled={success}
+            onChange={(event) => setName(event.target.value)}
+            autoFocus
+          />
+        </Field>
+        <Field label="Brinco" hint="Opcional — deixe vazio se o Animal não tiver brinco.">
+          <input
+            className={inputCls}
+            value={tag}
+            disabled={success}
+            onChange={(event) => setTag(event.target.value)}
+          />
+        </Field>
+        <p className="text-sm text-ink-soft">
+          Nome e brinco serão atualizados. Medições, Lotações e histórico permanecem intactos.
+        </p>
+      </div>
+    </Sheet>
   );
 }
 

@@ -8,6 +8,7 @@ import type {
   DailyMilkProduction,
   FactOrigin,
   Farm,
+  FarmBoundary,
   FeedingEvent,
   FeedEntry,
   FeedItem,
@@ -45,7 +46,9 @@ import type {
   pastureOccupancies,
   pastures,
   users,
+  farmBoundaries,
 } from '../db/schema.js';
+import { latLngPointFromGeoJson, latLngPolygonFromGeoJson } from '../db/spatial.js';
 
 // Linha do banco → DTO de domínio com a forma EXATA de src/domain/types.ts.
 // Campos opcionais viram `undefined` (chave omitida no JSON), nunca null.
@@ -55,6 +58,13 @@ type Row<T> = T extends { $inferSelect: infer R } ? R : never;
 export const toFarm = (r: Row<typeof farms>): Farm => ({ id: r.id, name: r.name });
 
 export const toUser = (r: Row<typeof users>): User => ({ id: r.id, name: r.name, farmId: r.farmId });
+
+export const toFarmBoundary = (r: Row<typeof farmBoundaries>): FarmBoundary => ({
+  id: r.id,
+  farmId: r.farmId,
+  name: r.name,
+  polygon: latLngPolygonFromGeoJson(r.boundary),
+});
 
 export const toAnimal = (r: Row<typeof animals>): Animal => ({
   id: r.id,
@@ -85,7 +95,7 @@ export const toPasture = (r: Row<typeof pastures>): Pasture => ({
   id: r.id,
   farmId: r.farmId,
   name: r.name,
-  polygon: r.polygon,
+  polygon: latLngPolygonFromGeoJson(r.polygon),
 });
 
 export const toInstallation = (r: Row<typeof installations>): Installation => ({
@@ -93,7 +103,7 @@ export const toInstallation = (r: Row<typeof installations>): Installation => ({
   farmId: r.farmId,
   name: r.name,
   type: r.type,
-  point: r.point,
+  point: latLngPointFromGeoJson(r.point),
 });
 
 export const toOccupancy = (r: Row<typeof pastureOccupancies>): PastureOccupancy => ({

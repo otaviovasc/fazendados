@@ -255,7 +255,7 @@ export function Sheet({
 }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-[1100] flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-ink/40" onClick={onClose} />
       <div className="relative w-full sm:max-w-md bg-paper-card rounded-t-3xl sm:rounded-2xl max-h-[88vh] flex flex-col safe-bottom">
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-black/5">

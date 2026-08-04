@@ -13,6 +13,7 @@ export default function MapaPage() {
 
   const [mode, setMode] = useState<MapMode>("idle");
   const [drawPoints, setDrawPoints] = useState<LatLng[]>([]);
+  const [editingPastureId, setEditingPastureId] = useState<string | null>(null);
   const [placePoint, setPlacePoint] = useState<LatLng | null>(null);
   const [selectedPastureId, setSelectedPastureId] = useState<string | null>(null);
 
@@ -30,7 +31,7 @@ export default function MapaPage() {
   // ---------- Interações do mapa ----------
 
   const handleMapClick = (p: LatLng) => {
-    if (mode === "draw") {
+    if (mode === "draw" || mode === "boundary") {
       setDrawPoints((pts) => [...pts, p]);
     } else if (mode === "place") {
       setPlacePoint(p);
@@ -47,17 +48,19 @@ export default function MapaPage() {
 
   const startDraw = () => {
     setSelectedPastureId(null);
+    setEditingPastureId(null);
     setDrawPoints([]);
     setMode("draw");
   };
 
   const cancelDraw = () => {
     setDrawPoints([]);
+    setEditingPastureId(null);
     setMode("idle");
   };
 
   const openSavePasture = () => {
-    setPastureName(`Pasto ${state.pastures.length + 1}`);
+    if (!editingPastureId) setPastureName(`Pasto ${state.pastures.length + 1}`);
     setSavePastureOpen(true);
   };
 
@@ -65,16 +68,54 @@ export default function MapaPage() {
     const name = pastureName.trim();
     if (!name || drawPoints.length < 3 || saving) return;
     setSaving(true);
-    const outcome = await dispatch({ type: "RegisterPasture", name, polygon: drawPoints });
+    const outcome = editingPastureId
+      ? await dispatch({ type: "UpdatePasture", pastureId: editingPastureId, name, polygon: drawPoints })
+      : await dispatch({ type: "RegisterPasture", name, polygon: drawPoints });
     setSaving(false);
     if (!outcome.ok) return; // erro visível no aviso global
     setSavePastureOpen(false);
     setPastureName("");
+    setEditingPastureId(null);
     cancelDraw();
+  };
+
+  const startBoundary = () => {
+    setSelectedPastureId(null);
+    setEditingPastureId(null);
+    // Edição é uma substituição explícita: o próximo desenho é a geometria
+    // inteira, nunca o perímetro antigo acrescido de novos pontos.
+    setDrawPoints([]);
+    setMode("boundary");
+  };
+
+  const saveBoundary = async () => {
+    if (drawPoints.length < 3 || saving) return;
+    setSaving(true);
+    const outcome = await dispatch({
+      type: "SetFarmBoundary",
+      name: state.farmBoundary?.name ?? "Sítio",
+      polygon: drawPoints,
+    });
+    setSaving(false);
+    if (!outcome.ok) return;
+    setDrawPoints([]);
+    setMode("idle");
+  };
+
+  const editPasture = (pastureId: string) => {
+    const pasture = state.pastures.find((p) => p.id === pastureId);
+    if (!pasture) return;
+    setSelectedPastureId(null);
+    setEditingPastureId(pastureId);
+    // O polígono será redesenhado por completo e auditado como substituição.
+    setDrawPoints([]);
+    setPastureName(pasture.name);
+    setMode("draw");
   };
 
   const startPlace = () => {
     setSelectedPastureId(null);
+    setEditingPastureId(null);
     setPlacePoint(null);
     setInstName("");
     setInstType("curral");
@@ -112,6 +153,19 @@ export default function MapaPage() {
         subtitle="Pastos, lotes e instalações da fazenda"
       />
 
+      <div className="mb-4 rounded-2xl border border-black/5 bg-paper-card px-4 py-3 text-sm text-ink-soft">
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          <span className="font-medium text-ink">
+            {state.farmBoundary ? "Perímetro oficial" : "Perímetro ainda não configurado"}
+          </span>
+          <span>{state.pastures.length} Pastos mapeados</span>
+          <span>{state.installations.length} Instalações</span>
+        </div>
+        {state.occupancies.filter((occupancy) => occupancy.end === null).length === 0 && (
+          <p className="mt-1 text-xs">Nenhum Lote alocado a um Pasto. Registre a ocupação quando houver confirmação no campo.</p>
+        )}
+      </div>
+
       <div className="flex flex-wrap justify-end gap-2 mb-3">
         <Button
           variant="secondary"
@@ -124,6 +178,10 @@ export default function MapaPage() {
         <Button variant="secondary" onClick={startDraw} disabled={mode !== "idle"}>
           <Pencil size={16} />
           Desenhar Pasto
+        </Button>
+        <Button variant="secondary" onClick={startBoundary} disabled={mode !== "idle"}>
+          <Pencil size={16} />
+          Editar perímetro
         </Button>
         <Button variant="secondary" onClick={startPlace} disabled={mode !== "idle"}>
           <MapPin size={16} />
@@ -144,13 +202,15 @@ export default function MapaPage() {
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[600] max-w-[calc(100%-1.5rem)]">
             <p className="bg-ink text-white text-sm font-medium rounded-full px-4 py-2 shadow-lg text-center">
               {mode === "draw"
-                ? `Desenhando pasto — toque no mapa para adicionar pontos (${drawPoints.length})`
-                : "Toque no mapa para posicionar a instalação"}
+                ? `${editingPastureId ? "Redesenhando pasto" : "Desenhando pasto"} — redesenhe o polígono inteiro (${drawPoints.length} pontos) à medida que toca no mapa`
+                : mode === "boundary"
+                  ? `Redesenhando perímetro — redesenhe o polígono inteiro (${drawPoints.length} pontos)`
+                  : "Toque no mapa para posicionar a instalação"}
             </p>
           </div>
         )}
 
-        {mode === "draw" && (
+        {(mode === "draw" || mode === "boundary") && (
           <div className="absolute bottom-3 inset-x-3 z-[600] flex flex-wrap justify-center gap-2">
             <Button
               variant="secondary"
@@ -163,8 +223,13 @@ export default function MapaPage() {
             <Button variant="ghost" className="bg-paper-card" onClick={cancelDraw}>
               Cancelar
             </Button>
-            <Button onClick={openSavePasture} disabled={drawPoints.length < 3}>
-              Salvar
+            <Button
+              onClick={mode === "boundary" ? saveBoundary : openSavePasture}
+              disabled={drawPoints.length < 3 || saving}
+            >
+              {mode === "boundary"
+                ? saving ? "Salvando…" : "Salvar perímetro"
+                : editingPastureId ? "Salvar edição" : "Salvar"}
             </Button>
           </div>
         )}
@@ -181,11 +246,16 @@ export default function MapaPage() {
           <PasturePanel
             pastureId={selectedPastureId}
             onClose={() => setSelectedPastureId(null)}
+            onEdit={editPasture}
           />
         )}
       </div>
 
       <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-ink-soft">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm border-2 border-dashed border-amber-700" />
+          Perímetro da Fazenda
+        </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-sm bg-pasture-500/60 border border-pasture-700" />
           Lote em pastejo
@@ -205,7 +275,7 @@ export default function MapaPage() {
       <Sheet
         open={savePastureOpen}
         onClose={() => setSavePastureOpen(false)}
-        title="Novo pasto"
+        title={editingPastureId ? "Editar pasto" : "Novo pasto"}
         footer={
           <div className="flex gap-2">
             <Button
@@ -220,7 +290,7 @@ export default function MapaPage() {
               disabled={!pastureName.trim() || saving}
               onClick={savePasture}
             >
-              {saving ? "Salvando…" : "Salvar pasto"}
+              {saving ? "Salvando…" : editingPastureId ? "Salvar edição" : "Salvar pasto"}
             </Button>
           </div>
         }

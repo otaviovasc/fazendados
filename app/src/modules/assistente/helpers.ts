@@ -13,6 +13,7 @@ export const KIND_LABEL: Record<string, string> = {
   coleta: "Coleta",
   trato: "Trato",
   lancamento_financeiro: "Lançamento financeiro",
+  desconhecida: "Captura não reconhecida",
 };
 
 export const CONFIDENCE_DOT: Record<string, string> = {

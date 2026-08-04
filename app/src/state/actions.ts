@@ -49,10 +49,12 @@ export type Action =
       after: string;
     }
   | { type: "RegisterAnimal"; name: string; tag?: string; groupId?: string; date: string }
+  | { type: "UpdateAnimal"; animalId: string; name: string; tag?: string }
   | { type: "ArchiveAnimal"; animalId: string; reason: string; date: string }
   | { type: "CreateHerdGroup"; name: string; milkingsPerDay: 1 | 2 }
   | { type: "AssignAnimalToGroup"; animalId: string; groupId: string; date: string }
   | { type: "RegisterPasture"; name: string; polygon: LatLng[] }
+  | { type: "SetFarmBoundary"; name: string; polygon: LatLng[] }
   | { type: "UpdatePasture"; pastureId: string; name: string; polygon: LatLng[] }
   | { type: "RegisterInstallation"; name: string; instType: InstallationType; point: LatLng }
   | { type: "MoveHerdGroup"; groupId: string; pastureId: string; date: string }
@@ -80,6 +82,11 @@ export type Action =
       dueDate?: string;
     }
   | { type: "SettleFinancialEntry"; entryId: string; date: string }
-  | { type: "CreateAssistantCapture"; text: string; proposal: ProposalInput }
-  | { type: "ConfirmAssistantProposal"; proposalId: string; recordIds?: string[] }
+  | { type: "CreateAssistantCapture"; text: string; proposals: ProposalInput[] }
+  | {
+      type: "ConfirmAssistantProposal";
+      proposalId: string;
+      fields: ProposalField[];
+      bindings?: { animalId: string; liters: number }[];
+    }
   | { type: "DismissAssistantProposal"; proposalId: string; reason?: string };

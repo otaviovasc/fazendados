@@ -362,6 +362,31 @@ export function animalDailyLiters(s: FarmState, animalId: string, date: string):
   return Math.round(rows.reduce((acc, m) => acc + m.liters, 0) * 10) / 10;
 }
 
+/**
+ * Últimos litros/dia medidos de um Animal. Cada item soma as ordenhas da data;
+ * datas sem Medição individual ficam ausentes e, portanto, não entram no resultado.
+ */
+export function recentAnimalDailyTotals(
+  s: FarmState,
+  animalId: string,
+  limit = 2,
+): { date: string; liters: number }[] {
+  const sessionDateById = new Map(s.sessions.map((session) => [session.id, session.date]));
+  const totalsByDate = new Map<string, number>();
+
+  for (const measurement of s.measurements) {
+    if (measurement.animalId !== animalId) continue;
+    const date = sessionDateById.get(measurement.sessionId);
+    if (!date) continue;
+    totalsByDate.set(date, (totalsByDate.get(date) ?? 0) + measurement.liters);
+  }
+
+  return [...totalsByDate.entries()]
+    .sort(([left], [right]) => right.localeCompare(left))
+    .slice(0, limit)
+    .map(([date, liters]) => ({ date, liters: Math.round(liters * 10) / 10 }));
+}
+
 export const SHIFT_LABEL: Record<MilkControlSession["shift"], string> = {
   manha: "manhã",
   tarde: "tarde",

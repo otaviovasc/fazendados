@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Tx } from '../db/client.js';
 import {
@@ -13,6 +13,7 @@ import {
   feedEntries,
   feedItems,
   financialEntries,
+  farmBoundaries,
   herdGroups,
   individualMilkMeasurements,
   installations,
@@ -21,7 +22,8 @@ import {
   pastureOccupancies,
   pastures,
 } from '../db/schema.js';
-import type { FactOrigin } from '../domain/types.js';
+import { pointGeometryFromLatLng, polygonGeometryFromLatLng } from '../db/spatial.js';
+import type { FactOrigin, ProposalField } from '../domain/types.js';
 import { uid } from '../lib/prng.js';
 import type { AuthContext } from './auth.js';
 import { badRequest, conflict, notFound } from './http.js';
@@ -34,6 +36,7 @@ import {
   toFeedingEvent,
   toFeedItem,
   toFinancialEntry,
+  toFarmBoundary,
   toHerdGroup,
   toInstallation,
   toMeasurement,
@@ -59,7 +62,7 @@ const liters = z.number().positive('litros deve ser > 0');
 const reason = z.string().trim().min(1, 'motivo é obrigatório');
 
 const proposalInput = z.object({
-  kind: z.enum(['producao_diaria', 'controle_leiteiro', 'coleta', 'trato', 'lancamento_financeiro']),
+  kind: z.enum(['producao_diaria', 'controle_leiteiro', 'coleta', 'trato', 'lancamento_financeiro', 'desconhecida']),
   title: z.string().min(1),
   fields: z.array(
     z.object({
@@ -73,6 +76,22 @@ const proposalInput = z.object({
   issues: z.array(z.string()),
   dismissReason: z.string().optional(),
 });
+
+const reviewedProposalFields = z.array(
+  z.object({
+    key: z.string().min(1),
+    label: z.string(),
+    value: z.string(),
+    confidence: z.enum(['alta', 'media', 'baixa']),
+  }),
+);
+
+const reviewedMeasurementBindings = z.array(
+  z.object({
+    animalId: z.string().min(1),
+    liters: z.number().positive(),
+  }),
+);
 
 /**
  * Correção de fato operacional (producao_diaria | coleta) — substitui o
@@ -115,6 +134,12 @@ export const actionSchema = z.discriminatedUnion('type', [
     groupId: z.string().optional(),
     date: isoDate,
   }),
+  z.object({
+    type: z.literal('UpdateAnimal'),
+    animalId: z.string().min(1),
+    name: z.string().trim().min(1),
+    tag: z.string().trim().min(1).optional(),
+  }),
   z.object({ type: z.literal('ArchiveAnimal'), animalId: z.string().min(1), reason, date: isoDate }),
   z.object({
     type: z.literal('CreateHerdGroup'),
@@ -123,6 +148,7 @@ export const actionSchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('AssignAnimalToGroup'), animalId: z.string().min(1), groupId: z.string().min(1), date: isoDate }),
   z.object({ type: z.literal('RegisterPasture'), name: z.string().trim().min(1), polygon: z.array(latLng).min(3) }),
+  z.object({ type: z.literal('SetFarmBoundary'), name: z.string().trim().min(1), polygon: z.array(latLng).min(3) }),
   z.object({
     type: z.literal('UpdatePasture'),
     pastureId: z.string().min(1),
@@ -160,12 +186,17 @@ export const actionSchema = z.discriminatedUnion('type', [
     dueDate: isoDate.optional(),
   }),
   z.object({ type: z.literal('SettleFinancialEntry'), entryId: z.string().min(1), date: isoDate }),
-  z.object({ type: z.literal('CreateAssistantCapture'), text: z.string().min(1), proposal: proposalInput }),
+  z.object({
+    type: z.literal('CreateAssistantCapture'),
+    text: z.string().min(1),
+    proposals: z.array(proposalInput).min(1).max(8),
+  }),
   z.object({
     type: z.literal('ConfirmAssistantProposal'),
     proposalId: z.string().min(1),
-    /** Ids dos fatos criados pela materialização (mesmos comandos manuais). */
-    recordIds: z.array(z.string()).optional(),
+    /** Valores revisados e vínculos aprovados pela pessoa, materializados no servidor. */
+    fields: reviewedProposalFields,
+    bindings: reviewedMeasurementBindings.optional(),
   }),
   z.object({ type: z.literal('DismissAssistantProposal'), proposalId: z.string().min(1), reason: z.string().optional() }),
 ]);
@@ -211,6 +242,27 @@ async function findGroup(tx: Tx, farmId: string, groupId: string) {
 async function findAnimal(tx: Tx, farmId: string, animalId: string) {
   const rows = await tx.select().from(animals).where(and(eq(animals.id, animalId), eq(animals.farmId, farmId))).limit(1);
   return rows[0] ?? null;
+}
+
+async function spatialPasture(tx: Tx, farmId: string, pastureId: string) {
+  const result = await tx.execute(sql`SELECT id, farm_id AS "farmId", name,
+    ST_AsGeoJSON(polygon)::jsonb AS polygon FROM pastures
+    WHERE id = ${pastureId} AND farm_id = ${farmId} LIMIT 1`);
+  return result.rows[0] as never;
+}
+
+async function spatialInstallation(tx: Tx, farmId: string, installationId: string) {
+  const result = await tx.execute(sql`SELECT id, farm_id AS "farmId", name, type,
+    ST_AsGeoJSON(point)::jsonb AS point FROM installations
+    WHERE id = ${installationId} AND farm_id = ${farmId} LIMIT 1`);
+  return result.rows[0] as never;
+}
+
+async function spatialBoundary(tx: Tx, farmId: string, boundaryId: string) {
+  const result = await tx.execute(sql`SELECT id, farm_id AS "farmId", name,
+    ST_AsGeoJSON(boundary)::jsonb AS boundary FROM farm_boundaries
+    WHERE id = ${boundaryId} AND farm_id = ${farmId} LIMIT 1`);
+  return result.rows[0] as never;
 }
 
 // ---------- executor ----------
@@ -393,6 +445,26 @@ export async function executeCommand(tx: Tx, ctx: AuthContext, a: CommandAction)
       return { animal: toAnimal(inserted[0]), assignment: assignment ? toAssignment(assignment) : null };
     }
 
+    case 'UpdateAnimal': {
+      const animal = await findAnimal(tx, farmId, a.animalId);
+      if (!animal) throw notFound('ANIMAL_NOT_FOUND', `Animal ${a.animalId} não encontrado.`);
+      const updated = await tx
+        .update(animals)
+        .set({ name: a.name, tag: a.tag ?? null })
+        .where(and(eq(animals.id, a.animalId), eq(animals.farmId, farmId)))
+        .returning();
+      await audit(tx, ctx, {
+        action: 'correcao',
+        entityType: 'animal',
+        entityId: a.animalId,
+        description: 'Dados do Animal atualizados',
+        before: [animal.name, animal.tag].filter(Boolean).join(' · '),
+        after: [updated[0].name, updated[0].tag].filter(Boolean).join(' · '),
+        origin: 'manual',
+      });
+      return { animal: toAnimal(updated[0]) };
+    }
+
     case 'ArchiveAnimal': {
       const animal = await findAnimal(tx, farmId, a.animalId);
       if (!animal) throw notFound('ANIMAL_NOT_FOUND', `Animal ${a.animalId} não encontrado.`);
@@ -464,15 +536,52 @@ export async function executeCommand(tx: Tx, ctx: AuthContext, a: CommandAction)
     }
 
     case 'RegisterPasture': {
-      const inserted = await tx.insert(pastures).values({ id: uid('p'), farmId, name: a.name, polygon: a.polygon }).returning();
+      const inserted = await tx.insert(pastures).values({
+        id: uid('p'),
+        farmId,
+        name: a.name,
+        polygon: polygonGeometryFromLatLng(a.polygon) as never,
+      }).returning({ id: pastures.id });
+      const pasture = await spatialPasture(tx, farmId, inserted[0].id);
       await audit(tx, ctx, {
         action: 'registro',
         entityType: 'pasto',
         entityId: inserted[0].id,
-        description: `Pasto ${inserted[0].name} cadastrado`,
+        description: `Pasto ${a.name} cadastrado`,
         origin: 'manual',
       });
-      return { pasture: toPasture(inserted[0]) };
+      return { pasture: toPasture(pasture) };
+    }
+
+    case 'SetFarmBoundary': {
+      const current = await tx
+        .select({ id: farmBoundaries.id })
+        .from(farmBoundaries)
+        .where(eq(farmBoundaries.farmId, farmId))
+        .limit(1);
+      const boundaryId = current[0]?.id ?? uid('boundary');
+      if (current[0]) {
+        await tx.update(farmBoundaries).set({
+          name: a.name,
+          boundary: polygonGeometryFromLatLng(a.polygon) as never,
+        }).where(eq(farmBoundaries.id, boundaryId));
+      } else {
+        await tx.insert(farmBoundaries).values({
+          id: boundaryId,
+          farmId,
+          name: a.name,
+          boundary: polygonGeometryFromLatLng(a.polygon) as never,
+        });
+      }
+      const boundary = await spatialBoundary(tx, farmId, boundaryId);
+      await audit(tx, ctx, {
+        action: current[0] ? 'correcao' : 'registro',
+        entityType: 'limite_fazenda',
+        entityId: boundaryId,
+        description: current[0] ? `Perímetro ${a.name} atualizado` : `Perímetro ${a.name} configurado`,
+        origin: 'manual',
+      });
+      return { farmBoundary: toFarmBoundary(boundary) };
     }
 
     case 'UpdatePasture': {
@@ -480,7 +589,11 @@ export async function executeCommand(tx: Tx, ctx: AuthContext, a: CommandAction)
         await tx.select().from(pastures).where(and(eq(pastures.id, a.pastureId), eq(pastures.farmId, farmId))).limit(1)
       )[0];
       if (!pasture) throw notFound('PASTURE_NOT_FOUND', `Pasto ${a.pastureId} não encontrado.`);
-      const updated = await tx.update(pastures).set({ name: a.name, polygon: a.polygon }).where(eq(pastures.id, a.pastureId)).returning();
+      await tx.update(pastures).set({
+        name: a.name,
+        polygon: polygonGeometryFromLatLng(a.polygon) as never,
+      }).where(eq(pastures.id, a.pastureId));
+      const updated = await spatialPasture(tx, farmId, a.pastureId);
       await audit(tx, ctx, {
         action: 'correcao',
         entityType: 'pasto',
@@ -488,22 +601,23 @@ export async function executeCommand(tx: Tx, ctx: AuthContext, a: CommandAction)
         description: `Pasto ${a.name} atualizado`,
         origin: 'manual',
       });
-      return { pasture: toPasture(updated[0]) };
+      return { pasture: toPasture(updated) };
     }
 
     case 'RegisterInstallation': {
       const inserted = await tx
         .insert(installations)
-        .values({ id: uid('i'), farmId, name: a.name, type: a.instType, point: a.point })
-        .returning();
+        .values({ id: uid('i'), farmId, name: a.name, type: a.instType, point: pointGeometryFromLatLng(a.point) as never })
+        .returning({ id: installations.id });
+      const installation = await spatialInstallation(tx, farmId, inserted[0].id);
       await audit(tx, ctx, {
         action: 'registro',
         entityType: 'instalacao',
         entityId: inserted[0].id,
-        description: `Instalação ${inserted[0].name} cadastrada`,
+        description: `Instalação ${a.name} cadastrada`,
         origin: 'manual',
       });
-      return { installation: toInstallation(inserted[0]) };
+      return { installation: toInstallation(installation) };
     }
 
     case 'MoveHerdGroup': {
@@ -643,42 +757,47 @@ export async function executeCommand(tx: Tx, ctx: AuthContext, a: CommandAction)
       const capture = (
         await tx.insert(assistantCaptures).values({ id: uid('cap'), farmId, text: a.text, createdAt: new Date() }).returning()
       )[0];
-      const proposal = (
-        await tx
-          .insert(assistantProposals)
-          .values({
-            id: uid('prop'),
-            captureId: capture.id,
-            kind: a.proposal.kind,
-            title: a.proposal.title,
-            fields: a.proposal.fields,
-            consequences: a.proposal.consequences,
-            issues: a.proposal.issues,
-            status: 'pendente',
-            dismissReason: a.proposal.dismissReason ?? null,
-            confirmedRecordIds: [],
-          })
-          .returning()
-      )[0];
-      await audit(tx, ctx, {
-        action: 'captura',
-        entityType: 'proposta',
-        entityId: proposal.id,
-        description: `Captura do Assistente registrada ("${proposal.title}")`,
-        origin: 'assistente',
-      });
-      return { capture: toCapture(capture), proposal: toProposal(proposal) };
+      const proposals = [];
+      for (const input of a.proposals) {
+        const proposal = (
+          await tx
+            .insert(assistantProposals)
+            .values({
+              id: uid('prop'),
+              captureId: capture.id,
+              kind: input.kind,
+              title: input.title,
+              fields: input.fields,
+              consequences: input.consequences,
+              issues: input.issues,
+              status: 'pendente',
+              dismissReason: input.dismissReason ?? null,
+              confirmedRecordIds: [],
+            })
+            .returning()
+        )[0];
+        proposals.push(proposal);
+        await audit(tx, ctx, {
+          action: 'captura',
+          entityType: 'proposta',
+          entityId: proposal.id,
+          description: `Captura do Assistente registrada ("${proposal.title}")`,
+          origin: 'assistente',
+        });
+      }
+      return { capture: toCapture(capture), proposals: proposals.map(toProposal) };
     }
 
     case 'ConfirmAssistantProposal': {
       const proposal = await findProposal(tx, farmId, a.proposalId);
       if (!proposal) throw notFound('PROPOSAL_NOT_FOUND', `Proposta ${a.proposalId} não encontrada.`);
       if (proposal.status !== 'pendente') return { proposal: toProposal(proposal) }; // idempotente
+      const materialized = await materializeAssistantProposal(tx, ctx, proposal, a.fields, a.bindings);
       const updated = await tx
         .update(assistantProposals)
         .set({
           status: 'confirmada',
-          confirmedRecordIds: a.recordIds ?? proposal.confirmedRecordIds,
+          confirmedRecordIds: materialized.recordIds,
         })
         .where(eq(assistantProposals.id, a.proposalId))
         .returning();
@@ -689,7 +808,12 @@ export async function executeCommand(tx: Tx, ctx: AuthContext, a: CommandAction)
         description: `Proposta "${proposal.title}" confirmada`,
         origin: 'assistente',
       });
-      return { proposal: toProposal(updated[0]) };
+      return {
+        proposal: toProposal(updated[0]),
+        facts: materialized.facts,
+        recordIds: materialized.recordIds,
+        summary: materialized.summary,
+      };
     }
 
     case 'DismissAssistantProposal': {
@@ -722,4 +846,276 @@ async function findProposal(tx: Tx, farmId: string, proposalId: string) {
     .where(and(eq(assistantProposals.id, proposalId), eq(assistantCaptures.farmId, farmId)))
     .limit(1);
   return rows[0]?.proposal ?? null;
+}
+
+type ConfirmAssistantAction = Extract<CommandAction, { type: 'ConfirmAssistantProposal' }>;
+type AssistantProposalRow = typeof assistantProposals.$inferSelect;
+
+type AssistantMaterialization = {
+  facts: number;
+  recordIds: string[];
+  summary: string;
+};
+
+function normalizeAssistantLabel(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function reviewedValue(fields: ProposalField[], key: string) {
+  return fields.find((field) => field.key === key)?.value.trim() ?? '';
+}
+
+function reviewedNumber(value: string) {
+  const numeric = Number(value.replace(/[^\d,.-]/g, '').replace(',', '.'));
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function reviewedDate(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
+
+function reviewedTime(value: string) {
+  return /^\d{2}:\d{2}$/.test(value) ? value : null;
+}
+
+/**
+ * Materializa uma Proposta inteira dentro da transação da Confirmação.
+ * Nenhum comando HTTP intermediário é usado: qualquer falha lança antes do
+ * commit e desfaz sessão, linhas, fatos e a própria confirmação em conjunto.
+ */
+async function materializeAssistantProposal(
+  tx: Tx,
+  ctx: AuthContext,
+  proposal: AssistantProposalRow,
+  fields: ProposalField[],
+  bindings?: ConfirmAssistantAction['bindings'],
+): Promise<AssistantMaterialization> {
+  const farmId = ctx.farm.id;
+  const recordIds: string[] = [];
+  const origin: FactOrigin = 'assistente';
+
+  if (proposal.kind === 'producao_diaria') {
+    const date = reviewedDate(reviewedValue(fields, 'date'));
+    const liters = reviewedNumber(reviewedValue(fields, 'liters'));
+    if (!date || liters === null || liters <= 0) {
+      throw badRequest('INVALID_PROPOSAL', 'Confira a data e o volume da Produção diária.');
+    }
+    const duplicate = await tx
+      .select({ id: dailyMilkProductions.id })
+      .from(dailyMilkProductions)
+      .where(and(eq(dailyMilkProductions.farmId, farmId), eq(dailyMilkProductions.date, date)))
+      .limit(1);
+    if (duplicate.length > 0) {
+      throw conflict('DUPLICATE_PRODUCTION_DATE', `Já existe produção diária registrada para ${date}. Use Correção para ajustar o valor.`);
+    }
+    const inserted = await tx
+      .insert(dailyMilkProductions)
+      .values({ id: uid('pd'), farmId, date, liters, origin })
+      .returning();
+    recordIds.push(inserted[0].id);
+    await audit(tx, ctx, {
+      action: 'registro',
+      entityType: 'producao_diaria',
+      entityId: inserted[0].id,
+      description: `Produção diária de ${date} registrada`,
+      origin,
+    });
+    return { facts: 1, recordIds, summary: `Produção diária registrada — ${liters.toFixed(1).replace('.', ',')} L` };
+  }
+
+  if (proposal.kind === 'coleta') {
+    const date = reviewedDate(reviewedValue(fields, 'date'));
+    const time = reviewedTime(reviewedValue(fields, 'time'));
+    const liters = reviewedNumber(reviewedValue(fields, 'liters'));
+    if (!date || !time || liters === null || liters <= 0) {
+      throw badRequest('INVALID_PROPOSAL', 'Confira data, horário e volume da Coleta.');
+    }
+    const inserted = await tx
+      .insert(milkCollections)
+      .values({ id: uid('col'), farmId, date, time, liters, origin })
+      .returning();
+    recordIds.push(inserted[0].id);
+    await audit(tx, ctx, {
+      action: 'registro',
+      entityType: 'coleta',
+      entityId: inserted[0].id,
+      description: `Coleta de ${date} às ${time} registrada`,
+      origin,
+    });
+    return { facts: 1, recordIds, summary: `Coleta registrada — ${liters.toFixed(1).replace('.', ',')} L às ${time}` };
+  }
+
+  if (proposal.kind === 'lancamento_financeiro') {
+    const date = reviewedDate(reviewedValue(fields, 'date'));
+    const amount = reviewedNumber(reviewedValue(fields, 'amount'));
+    const kind = /receita/i.test(reviewedValue(fields, 'kind')) ? 'receita' : 'despesa';
+    const description = reviewedValue(fields, 'description') || proposal.title;
+    if (!date || amount === null || amount <= 0) {
+      throw badRequest('INVALID_PROPOSAL', 'Confira data e valor do lançamento financeiro.');
+    }
+    const amountCents = Math.round(amount * 100);
+    const inserted = await tx
+      .insert(financialEntries)
+      .values({
+        id: uid('fin'),
+        farmId,
+        kind,
+        description,
+        amountCents,
+        date,
+        dueDate: reviewedDate(reviewedValue(fields, 'dueDate')),
+        settledAt: null,
+        origin,
+      })
+      .returning();
+    recordIds.push(inserted[0].id);
+    await audit(tx, ctx, {
+      action: 'registro',
+      entityType: 'lancamento_financeiro',
+      entityId: inserted[0].id,
+      description: `${kind === 'receita' ? 'Receita' : 'Despesa'} registrada`,
+      origin,
+    });
+    return { facts: 1, recordIds, summary: `Lançamento registrado — R$ ${(amountCents / 100).toFixed(2).replace('.', ',')}` };
+  }
+
+  if (proposal.kind === 'trato') {
+    const groupName = normalizeAssistantLabel(reviewedValue(fields, 'group'));
+    const date = reviewedDate(reviewedValue(fields, 'date'));
+    const group = (await tx.select().from(herdGroups).where(eq(herdGroups.farmId, farmId)))
+      .find((candidate) => normalizeAssistantLabel(candidate.name) === groupName);
+    const rawItems = reviewedValue(fields, 'items');
+    const feedRows = await tx.select().from(feedItems).where(eq(feedItems.farmId, farmId));
+    const items: { itemId: string; quantity: number }[] = [];
+    for (const part of rawItems.split('·').map((line) => line.trim()).filter(Boolean)) {
+      const normalized = normalizeAssistantLabel(part);
+      const item = [...feedRows]
+        .sort((left, right) => right.name.length - left.name.length)
+        .find((candidate) => {
+          const name = normalizeAssistantLabel(candidate.name);
+          return normalized === name || normalized.startsWith(`${name} `);
+        });
+      const quantity = reviewedNumber((part.match(/[\d]+(?:[,.][\d]+)?/) ?? [''])[0]);
+      if (!item || quantity === null || quantity <= 0) {
+        throw badRequest('INVALID_PROPOSAL', 'Confira Lote, data, alimentos e quantidades do Trato.');
+      }
+      items.push({ itemId: item.id, quantity });
+    }
+    if (!group || !date || items.length === 0) {
+      throw badRequest('INVALID_PROPOSAL', 'Confira Lote, data, alimentos e quantidades do Trato.');
+    }
+    const inserted = await tx
+      .insert(feedingEvents)
+      .values({ id: uid('fv'), farmId, groupId: group.id, date, origin })
+      .returning();
+    await tx.insert(feedingEventItems).values(items.map((item) => ({
+      id: uid('fi'),
+      eventId: inserted[0].id,
+      itemId: item.itemId,
+      quantity: item.quantity,
+    })));
+    recordIds.push(inserted[0].id);
+    await audit(tx, ctx, {
+      action: 'registro',
+      entityType: 'trato',
+      entityId: inserted[0].id,
+      description: 'Trato registrado',
+      origin,
+    });
+    return { facts: 1, recordIds, summary: `Trato registrado — ${group.name}` };
+  }
+
+  if (proposal.kind === 'controle_leiteiro') {
+    const date = reviewedDate(reviewedValue(fields, 'date'));
+    const groupName = normalizeAssistantLabel(reviewedValue(fields, 'group'));
+    const shiftValue = normalizeAssistantLabel(reviewedValue(fields, 'shift'));
+    const shift = shiftValue.includes('tarde') ? 'tarde' : shiftValue.includes('unica') ? 'unica' : 'manha';
+    const group = (await tx.select().from(herdGroups).where(eq(herdGroups.farmId, farmId)))
+      .find((candidate) => normalizeAssistantLabel(candidate.name) === groupName);
+    const rows = bindings ?? [];
+    if (!date || !group || rows.length === 0) {
+      throw badRequest('INVALID_PROPOSAL', 'Confira data, Lote, turno e medições do Controle leiteiro.');
+    }
+    if ((group.milkingsPerDay === 1 && shift !== 'unica') || (group.milkingsPerDay === 2 && shift === 'unica')) {
+      throw badRequest('INVALID_SHIFT', `${group.name} não permite o turno escolhido.`);
+    }
+    if (new Set(rows.map((row) => row.animalId)).size !== rows.length) {
+      throw badRequest('DUPLICATE_MEASUREMENT', 'O Controle leiteiro contém o mesmo Animal mais de uma vez.');
+    }
+    const animalsById = new Map<string, { id: string; name: string }>();
+    for (const row of rows) {
+      const animal = await findAnimal(tx, farmId, row.animalId);
+      if (!animal) throw notFound('ANIMAL_NOT_FOUND', `Animal ${row.animalId} não encontrado.`);
+      animalsById.set(row.animalId, animal);
+    }
+    const existing = (await tx
+      .select()
+      .from(milkControlSessions)
+      .where(and(
+        eq(milkControlSessions.farmId, farmId),
+        eq(milkControlSessions.groupId, group.id),
+        eq(milkControlSessions.date, date),
+        eq(milkControlSessions.shift, shift),
+      ))
+      .limit(1))[0];
+    if (existing?.status === 'concluido') {
+      throw conflict('SESSION_CLOSED', `O controle de ${group.name} já está concluído.`);
+    }
+    const sessionId = existing?.id ?? uid('cs');
+    if (!existing) {
+      await tx.insert(milkControlSessions).values({
+        id: sessionId,
+        farmId,
+        date,
+        groupId: group.id,
+        shift,
+        status: 'em_andamento',
+        origin,
+      });
+      await audit(tx, ctx, {
+        action: 'registro',
+        entityType: 'controle_leiteiro',
+        entityId: sessionId,
+        description: `Controle leiteiro iniciado (${group.name}, ${date}, ${shift})`,
+        origin,
+      });
+    }
+    for (const row of rows) {
+      const inserted = await tx
+        .insert(individualMilkMeasurements)
+        .values({ id: uid('mm'), sessionId, animalId: row.animalId, liters: row.liters })
+        .onConflictDoUpdate({
+          target: [individualMilkMeasurements.sessionId, individualMilkMeasurements.animalId],
+          set: { liters: row.liters },
+        })
+        .returning();
+      recordIds.push(inserted[0].id);
+      await audit(tx, ctx, {
+        action: 'registro',
+        entityType: 'medicao_individual',
+        entityId: inserted[0].id,
+        description: `Medição individual registrada (${animalsById.get(row.animalId)?.name ?? row.animalId}: ${row.liters.toFixed(1).replace('.', ',')} L)`,
+        origin,
+      });
+    }
+    await tx.update(milkControlSessions).set({ status: 'concluido' }).where(eq(milkControlSessions.id, sessionId));
+    await audit(tx, ctx, {
+      action: 'registro',
+      entityType: 'controle_leiteiro',
+      entityId: sessionId,
+      description: 'Controle leiteiro concluído',
+      origin,
+    });
+    return {
+      facts: rows.length + 1,
+      recordIds: [sessionId, ...recordIds],
+      summary: `${rows.length} ${rows.length === 1 ? 'medição registrada' : 'medições registradas'} — ${group.name}`,
+    };
+  }
+
+  throw badRequest('UNSUPPORTED_PROPOSAL', 'Esta Proposta não corresponde a um Registro suportado.');
 }

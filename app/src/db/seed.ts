@@ -1,12 +1,12 @@
-import { inArray, eq } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { closeDb, getDb } from './client.js';
+import { polygonGeometryFromLatLng } from './spatial.js';
 import {
   animalGroupAssignments,
   animals,
   assistantCaptures,
   assistantProposals,
   auditEvents,
-  authSessions,
   dailyMilkProductions,
   farms,
   feedingEventItems,
@@ -14,19 +14,22 @@ import {
   feedEntries,
   feedItems,
   financialEntries,
+  farmBoundaries,
   herdGroups,
-  idempotencyKeys,
   individualMilkMeasurements,
-  installations,
   milkCollections,
   milkControlSessions,
-  pastureOccupancies,
   pastures,
   users,
 } from './schema.js';
 import { addDays, lastNDays, today } from '../lib/dates.js';
 import { mulberry32 } from '../lib/prng.js';
 import type { LatLng } from '../domain/types.js';
+import {
+  SEEDED_ANIMALS,
+  SEEDED_ASSIGNMENTS,
+  SEEDED_HERD_GROUPS,
+} from './seed-herd-data.js';
 
 // ---------------------------------------------------------------------------
 // Seed determinístico e reexecutável — replica o caderno real (30 dias, 2 dias
@@ -41,61 +44,84 @@ const pick = <T,>(arr: T[]): T => arr[Math.floor(rand() * arr.length)];
 const between = (min: number, max: number) => min + rand() * (max - min);
 const round1 = (v: number) => Math.round(v * 10) / 10;
 
-// Base geográfica: zona rural do interior de SP (referência fictícia plausível).
-const BASE: LatLng = [-23.0185, -47.3125];
-const offset = (lat: number, lng: number): LatLng => [
-  BASE[0] + lat / 111_000,
-  BASE[1] + lng / 101_000,
-];
-const rect = (x: number, y: number, w: number, h: number): LatLng[] => [
-  offset(y, x),
-  offset(y, x + w),
-  offset(y + h, x + w),
-  offset(y + h, x),
+// Dados cartográficos adaptados do sitio-cafezinho. O seed não inclui
+// Instalações nem ocupações: semeá-las exigiria afirmar informações que não
+// vieram da fonte; elas entram pela operação manual do Mapa.
+const SITIO_BOUNDARY: LatLng[] = [
+  [-22.30335409625803, -52.06158343688227],
+  [-22.305618530951836, -52.06156197263571],
+  [-22.30512194753891, -52.056668124419524],
+  [-22.304247956443884, -52.05620664311843],
+  [-22.30332430081998, -52.05626030373483],
+  [-22.303135596231428, -52.05629250010469],
+  [-22.302221865144286, -52.05689349900843],
+  [-22.301645814213096, -52.05746230154232],
+  [-22.3010697609064, -52.05811696106246],
+  [-22.298239119627198, -52.05864283510325],
+  [-22.294057611263767, -52.0561744467486],
+  [-22.292076060052782, -52.05764572394289],
+  [-22.289433959927507, -52.057237903258205],
+  [-22.288500273503885, -52.056497386751815],
+  [-22.29217538615104, -52.06353765962422],
+  [-22.29591992855591, -52.06332301715859],
+  [-22.29711180428985, -52.06324789229562],
+  [-22.300369546086934, -52.06302251770674],
+  [-22.303130621423232, -52.06289373222735],
 ];
 
-const ANIMAL_NAMES = [
-  "Mimosa", "Estrela", "Boneca", "Princesa", "Jandira", "Rosalinda",
-  "Pandora", "Xodó", "Flor", "Morena", "Clarita", "Dourada",
-  "Pinta", "Malhada", "Serena", "Vitória", "Amora", "Cigana",
-  "Luna", "Bela", "Tainá", "Gaúcha", "Fumaça", "Pérola",
+const REAL_PASTURES: { id: string; name: string; polygon: LatLng[] }[] = [
+  { id: '46b11441-f73a-447e-a41b-111c8ec09ab2', name: 'Pasto Engorda', polygon: [[-22.30013460545606, -52.05906312652388], [-22.29979730598745, -52.05929923323606], [-22.299598894154936, -52.059578268441385], [-22.29945187603075, -52.05977995037503], [-22.301350667650073, -52.05969409338877]] },
+  { id: '47c0300f-181e-443c-8abd-5eb770eab897', name: 'Pasto 7', polygon: [[-22.296369706903246, -52.06082595696456], [-22.29642431605823, -52.061668430847654], [-22.298886670322354, -52.0616469665449], [-22.298985957890537, -52.06076693013198]] },
+  { id: '77ca9bb2-0ede-4416-894e-81a6c2cbc4b9', name: 'Pasto Vaca Mojada', polygon: [[-22.30322022096864, -52.05965529026516], [-22.303180539597058, -52.06160317064067], [-22.30180160493096, -52.061613902763945], [-22.301836326474533, -52.0597411472514]] },
+  { id: '8732359e-547b-4084-a692-bee4c2739c9a', name: 'Pasto 4', polygon: [[-22.301791662885464, -52.061658762265736], [-22.303190438338277, -52.06164803014247], [-22.303091234866937, -52.06288222431935], [-22.301781742442152, -52.062935884936195]] },
+  { id: '8ea4d7d0-30de-4414-b483-344ddce4c869', name: 'Pasto 3', polygon: [[-22.30182142421115, -52.0596947837053], [-22.299158143837957, -52.059795501401325], [-22.29902421526921, -52.06072383006514], [-22.301792046265188, -52.06065943732546]] },
+  { id: 'a6982d74-a99d-483c-9713-02ea499af3aa', name: 'Pasto bezerro', polygon: [[-22.303149398894845, -52.05652728535381], [-22.302970832543227, -52.05646289261413], [-22.302117679045843, -52.05709608788769], [-22.302226803621018, -52.05751464069568], [-22.302841867813964, -52.057171212750674]] },
+  { id: 'adec137f-a282-4a89-b4fe-958551985d3b', name: 'Pasto 2', polygon: [[-22.30334881241088, -52.05849266098339], [-22.30527334363052, -52.05870730344904], [-22.305541188656814, -52.061540583995225], [-22.303358732742876, -52.06155131611852]] },
+  { id: 'd008dcdd-228f-4a50-ae7e-92a597ddaf7e', name: 'Pasto 1', polygon: [[-22.303338886225117, -52.05847035520812], [-22.305283257972828, -52.05869572979703], [-22.305074933723148, -52.05669955486675], [-22.304291234952977, -52.05628100205877], [-22.303259523538014, -52.056334662675184]] },
+  { id: 'de97fd19-72fb-4b29-a16f-70afa26db5de', name: 'Pasto bezerro grande', polygon: [[-22.30320699062455, -52.05776277815345], [-22.302626174899874, -52.05775741207777], [-22.30263113914709, -52.05786473359156], [-22.302551711170764, -52.05789156396998], [-22.302502068662623, -52.05967310109858], [-22.30322188330371, -52.05964627072015]] },
+  { id: 'e4cdffe2-7e73-4b4f-b08e-a3c645b2340d', name: 'Pasto bezerro 2', polygon: [[-22.30316019134824, -52.05656927041435], [-22.30316019134824, -52.05765321486573], [-22.30291019844163, -52.057610286372615], [-22.302860596615275, -52.05720246568792]] },
+  { id: 'e5dcf32f-7185-47e5-8cf0-0ce5544ec2d4', name: 'Praca Alimentacao 2', polygon: [[-22.29952816809163, -52.05916949807718], [-22.299776182963818, -52.05930901567984], [-22.299815865302513, -52.05922315869359], [-22.29994483282544, -52.059008516227976], [-22.300301973036742, -52.058708016776094], [-22.300391257946885, -52.058793873762355], [-22.300966648221348, -52.05823580335172], [-22.29982578588544, -52.058396785200934], [-22.299696818252645, -52.058708016776094], [-22.299508326882844, -52.058708016776094]] },
+  { id: 'd3d23753-8ac4-477b-a101-53564b5a6ea4', name: 'Pasto 5', polygon: [[-22.29904247051858, -52.06073480329952], [-22.29891339671841, -52.06164167009088], [-22.301787691918403, -52.06160985821359], [-22.301792656195413, -52.06067616104379]] },
+  { id: 'f62e1c84-2099-462d-8a37-d0682de12825', name: 'Pasto 6', polygon: [[-22.298868033169153, -52.059774516111794], [-22.296400714108177, -52.05983890902006], [-22.296365962824336, -52.060810168719684], [-22.298917676968703, -52.06073504366004]] },
+  { id: 'fee356ac-ca46-49a3-8571-4282febbe77a', name: 'Praca Alimentacao 1', polygon: [[-22.300147037036957, -52.05904962360036], [-22.300375209724777, -52.05883498113473], [-22.300772030902916, -52.05842716045006], [-22.301010123068775, -52.058233982230995], [-22.301297817227724, -52.05819105373788], [-22.301178771440703, -52.058266178600846], [-22.301228373864262, -52.05844862469661], [-22.301367260556635, -52.05841642832679], [-22.30180376069071, -52.05968281887395], [-22.301347419609023, -52.05970428312051]] },
 ];
 
-async function wipeFarm(db: ReturnType<typeof getDb>) {
-  const farmAnimalIds = db.select({ id: animals.id }).from(animals).where(eq(animals.farmId, FARM_ID));
-  const farmGroupIds = db.select({ id: herdGroups.id }).from(herdGroups).where(eq(herdGroups.farmId, FARM_ID));
-  const farmSessionIds = db.select({ id: milkControlSessions.id }).from(milkControlSessions).where(eq(milkControlSessions.farmId, FARM_ID));
-  const farmEventIds = db.select({ id: feedingEvents.id }).from(feedingEvents).where(eq(feedingEvents.farmId, FARM_ID));
-  const farmCaptureIds = db.select({ id: assistantCaptures.id }).from(assistantCaptures).where(eq(assistantCaptures.farmId, FARM_ID));
-  const farmUserIds = db.select({ id: users.id }).from(users).where(eq(users.farmId, FARM_ID));
+type DbExecutor = Pick<ReturnType<typeof getDb>, 'execute'>;
 
-  await db.delete(idempotencyKeys).where(eq(idempotencyKeys.farmId, FARM_ID));
-  await db.delete(authSessions).where(inArray(authSessions.userId, farmUserIds));
-  await db.delete(auditEvents).where(eq(auditEvents.farmId, FARM_ID));
-  await db.delete(assistantProposals).where(inArray(assistantProposals.captureId, farmCaptureIds));
-  await db.delete(assistantCaptures).where(eq(assistantCaptures.farmId, FARM_ID));
-  await db.delete(financialEntries).where(eq(financialEntries.farmId, FARM_ID));
-  await db.delete(feedingEventItems).where(inArray(feedingEventItems.eventId, farmEventIds));
-  await db.delete(feedingEvents).where(eq(feedingEvents.farmId, FARM_ID));
-  await db.delete(feedEntries).where(eq(feedEntries.farmId, FARM_ID));
-  await db.delete(feedItems).where(eq(feedItems.farmId, FARM_ID));
-  await db.delete(individualMilkMeasurements).where(inArray(individualMilkMeasurements.sessionId, farmSessionIds));
-  await db.delete(milkControlSessions).where(eq(milkControlSessions.farmId, FARM_ID));
-  await db.delete(milkCollections).where(eq(milkCollections.farmId, FARM_ID));
-  await db.delete(dailyMilkProductions).where(eq(dailyMilkProductions.farmId, FARM_ID));
-  await db.delete(pastureOccupancies).where(inArray(pastureOccupancies.groupId, farmGroupIds));
-  await db.delete(installations).where(eq(installations.farmId, FARM_ID));
-  await db.delete(pastures).where(eq(pastures.farmId, FARM_ID));
-  await db.delete(animalGroupAssignments).where(inArray(animalGroupAssignments.animalId, farmAnimalIds));
-  await db.delete(animals).where(eq(animals.farmId, FARM_ID));
-  await db.delete(herdGroups).where(eq(herdGroups.farmId, FARM_ID));
-  await db.delete(users).where(eq(users.farmId, FARM_ID));
-  await db.delete(farms).where(eq(farms.id, FARM_ID));
+async function wipeFarm(db: DbExecutor) {
+  // A seed is a local reset command, but it must still be atomic. Keep the
+  // dependency order explicit so Postgres never sees a farm with children.
+  await db.execute(sql`delete from "idempotency_keys" where "farm_id" = ${FARM_ID}`);
+  await db.execute(sql`delete from "sessions" where "user_id" in (select "id" from "users" where "farm_id" = ${FARM_ID})`);
+  await db.execute(sql`delete from "audit_events" where "farm_id" = ${FARM_ID}`);
+  await db.execute(sql`delete from "assistant_proposals" where "capture_id" in (select "id" from "assistant_captures" where "farm_id" = ${FARM_ID})`);
+  await db.execute(sql`delete from "assistant_captures" where "farm_id" = ${FARM_ID}`);
+  await db.execute(sql`delete from "financial_entries" where "farm_id" = ${FARM_ID}`);
+  await db.execute(sql`delete from "feeding_event_items" where "event_id" in (select "id" from "feeding_events" where "farm_id" = ${FARM_ID})`);
+  await db.execute(sql`delete from "feeding_events" where "farm_id" = ${FARM_ID}`);
+  await db.execute(sql`delete from "feed_entries" where "farm_id" = ${FARM_ID}`);
+  await db.execute(sql`delete from "feed_items" where "farm_id" = ${FARM_ID}`);
+  await db.execute(sql`delete from "individual_milk_measurements" where "session_id" in (select "id" from "milk_control_sessions" where "farm_id" = ${FARM_ID})`);
+  await db.execute(sql`delete from "milk_control_sessions" where "farm_id" = ${FARM_ID}`);
+  await db.execute(sql`delete from "milk_collections" where "farm_id" = ${FARM_ID}`);
+  await db.execute(sql`delete from "daily_milk_productions" where "farm_id" = ${FARM_ID}`);
+  await db.execute(sql`delete from "pasture_occupancies" where "group_id" in (select "id" from "herd_groups" where "farm_id" = ${FARM_ID}) or "pasture_id" in (select "id" from "pastures" where "farm_id" = ${FARM_ID})`);
+  await db.execute(sql`delete from "installations" where "farm_id" = ${FARM_ID}`);
+  // This was the failing dependency in the Docker seed. Delete it explicitly
+  // before the farm, rather than relying on a cascade that does not exist.
+  await db.execute(sql`delete from "farm_boundaries" where "farm_id" = ${FARM_ID}`);
+  await db.execute(sql`delete from "pastures" where "farm_id" = ${FARM_ID}`);
+  await db.execute(sql`delete from "animal_group_assignments" where "animal_id" in (select "id" from "animals" where "farm_id" = ${FARM_ID}) or "group_id" in (select "id" from "herd_groups" where "farm_id" = ${FARM_ID})`);
+  await db.execute(sql`delete from "animals" where "farm_id" = ${FARM_ID}`);
+  await db.execute(sql`delete from "herd_groups" where "farm_id" = ${FARM_ID}`);
+  await db.execute(sql`delete from "users" where "farm_id" = ${FARM_ID}`);
+  await db.execute(sql`delete from "farms" where "id" = ${FARM_ID}`);
 }
 
 async function seed() {
-  const db = getDb();
-  await wipeFarm(db);
+  const connection = getDb();
+  await connection.transaction(async (db) => {
+    await wipeFarm(db);
 
   const t = today();
   const days = lastNDays(30);
@@ -104,40 +130,15 @@ async function seed() {
   await db.insert(users).values({ id: 'u1', farmId: FARM_ID, name: 'Otávio' });
 
   // Rebanho
-  const animalRows = ANIMAL_NAMES.map((name, i) => ({
-    id: `a${i + 1}`,
-    farmId: FARM_ID,
-    name,
-    tag: `B-${String(12 + i * 3).padStart(3, "0")}`,
-    status: i >= 22 ? "arquivado" : "ativo",
-    archivedAt: i >= 22 ? addDays(t, -12 + i) : null,
-    archiveReason: i >= 22 ? "Vendida" : null,
-  }));
+  const animalRows = SEEDED_ANIMALS.map((animal) => ({ ...animal, farmId: FARM_ID }));
   await db.insert(animals).values(animalRows);
 
-  // Lotes: 1 e 2 ordenham 2×/dia; 3 ordenha 1×/dia.
-  await db.insert(herdGroups).values([
-    { id: "g1", farmId: FARM_ID, name: "Lote 1", milkingsPerDay: 2 },
-    { id: "g2", farmId: FARM_ID, name: "Lote 2", milkingsPerDay: 2 },
-    { id: "g3", farmId: FARM_ID, name: "Lote 3", milkingsPerDay: 1 },
-  ]);
+  // Lotes reais do V1: Lote 1 ordenha duas vezes; Lote 2, uma vez.
+  await db.insert(herdGroups).values(
+    SEEDED_HERD_GROUPS.map((group) => ({ ...group, farmId: FARM_ID })),
+  );
 
-  const assignmentRows = animalRows.map((a, i) => ({
-    id: `as${i + 1}`,
-    animalId: a.id,
-    groupId: i < 9 ? "g1" : i < 17 ? "g2" : "g3",
-    start: addDays(t, -90),
-    end: null as string | null,
-  }));
-  // Uma mudança de lote recente, com histórico.
-  assignmentRows[10] = { ...assignmentRows[10], end: addDays(t, -6) };
-  assignmentRows.push({
-    id: "as_moved",
-    animalId: animalRows[10].id,
-    groupId: "g1",
-    start: addDays(t, -6),
-    end: null,
-  });
+  const assignmentRows = SEEDED_ASSIGNMENTS.map((assignment) => ({ ...assignment }));
   await db.insert(animalGroupAssignments).values(assignmentRows);
 
   const animalsOfGroup = (gid: string) =>
@@ -145,27 +146,22 @@ async function seed() {
       assignmentRows.some((x) => x.animalId === a.id && x.groupId === gid && x.end === null)
     );
 
-  // Espaço
-  await db.insert(pastures).values([
-    { id: "p1", farmId: FARM_ID, name: "Pasto da Sede", polygon: rect(0, 0, 260, 190) },
-    { id: "p2", farmId: FARM_ID, name: "Pasto do Eucalipto", polygon: rect(260, 0, 300, 190) },
-    { id: "p3", farmId: FARM_ID, name: "Pasto do Fundão", polygon: rect(0, 190, 260, 230) },
-    { id: "p4", farmId: FARM_ID, name: "Pasto da Cerca Velha", polygon: rect(260, 190, 300, 230) },
-  ]);
-
-  await db.insert(installations).values([
-    { id: "i1", farmId: FARM_ID, name: "Curral de ordenha", type: "curral" as const, point: offset(60, 80) },
-    { id: "i2", farmId: FARM_ID, name: "Tanque de resfriamento", type: "tanque" as const, point: offset(48, 110) },
-    { id: "i3", farmId: FARM_ID, name: "Depósito de ração", type: "deposito" as const, point: offset(85, 55) },
-  ]);
-
-  await db.insert(pastureOccupancies).values([
-    { id: "o1", groupId: "g1", pastureId: "p2", start: addDays(t, -18), end: null },
-    { id: "o2", groupId: "g2", pastureId: "p4", start: addDays(t, -9), end: null },
-    { id: "o3", groupId: "g3", pastureId: "p1", start: addDays(t, -25), end: null },
-    // Histórico: Lote 1 esteve no Fundão antes.
-    { id: "o0", groupId: "g1", pastureId: "p3", start: addDays(t, -40), end: addDays(t, -18) },
-  ]);
+  // Espaço real do sitio-cafezinho: o perímetro é oficial; os Pastos não
+  // recebem Lote até que alguém faça a alocação no produto.
+  await db.insert(farmBoundaries).values({
+    id: 'c4b5c739-cda2-4d95-a860-ad7b40a35e20',
+    farmId: FARM_ID,
+    name: 'Sítio',
+    boundary: polygonGeometryFromLatLng(SITIO_BOUNDARY) as never,
+  });
+  await db.insert(pastures).values(
+    REAL_PASTURES.map((pasture) => ({
+      id: pasture.id,
+      farmId: FARM_ID,
+      name: pasture.name,
+      polygon: polygonGeometryFromLatLng(pasture.polygon) as never,
+    })),
+  );
 
   // Produção diária: UM valor por dia, Fazenda. Dois dias sem medição.
   const missingDays = new Set([addDays(t, -14), addDays(t, -5)]);
@@ -196,7 +192,8 @@ async function seed() {
   await db.insert(milkCollections).values(collectionRows);
 
   // Controles leiteiros: sessão = Lote + data + turno (espelha o caderno).
-  // Hoje esporádicos; meta semanal. Um dia tem Lote 2 só de manhã (lacuna real).
+  // O turno é derivado da rotina de cada Lote; uma tarde do Lote 1 fica
+  // ausente para manter uma lacuna real sem inventar medição.
   const sessionOffsets = [-29, -22, -17, -9, -2];
   const sessionRows: (typeof milkControlSessions.$inferInsert)[] = [];
   const measurementRows: (typeof individualMilkMeasurements.$inferInsert)[] = [];
@@ -229,11 +226,14 @@ async function seed() {
 
   sessionOffsets.forEach((off, si) => {
     const d = addDays(t, off);
-    addSession(d, "g1", "manha", si);
-    addSession(d, "g1", "tarde", si);
-    addSession(d, "g2", "manha", si);
-    if (off !== -9) addSession(d, "g2", "tarde", si); // lacuna: tarde do Lote 2 no dia -9
-    addSession(d, "g3", "unica", si);
+    for (const group of SEEDED_HERD_GROUPS) {
+      const shifts: ("manha" | "tarde" | "unica")[] =
+        group.milkingsPerDay === 1 ? ["unica"] : ["manha", "tarde"];
+      for (const shift of shifts) {
+        if (group.id === SEEDED_HERD_GROUPS[0].id && shift === "tarde" && off === -9) continue;
+        addSession(d, group.id, shift, si);
+      }
+    }
   });
   await db.insert(milkControlSessions).values(sessionRows);
   await db.insert(individualMilkMeasurements).values(measurementRows);
@@ -257,7 +257,7 @@ async function seed() {
     feedingEventRows.push({
       id: eventId,
       farmId: FARM_ID,
-      groupId: pick(["g1", "g2"]),
+      groupId: SEEDED_HERD_GROUPS[Math.floor(rand() * SEEDED_HERD_GROUPS.length)].id,
       date: addDays(t, -i),
       origin: "manual",
     });
@@ -393,10 +393,11 @@ async function seed() {
     origin: "assistente",
   });
 
-  console.log(
-    `Seed concluído: ${animalRows.length} animais, ${productionRows.length} produções, ${collectionRows.length} coletas, ` +
-      `${sessionRows.length} sessões, ${measurementRows.length} medições, ${feedingEventRows.length} tratos.`,
-  );
+    console.log(
+      `Seed concluído: ${animalRows.length} animais, ${productionRows.length} produções, ${collectionRows.length} coletas, ` +
+        `${sessionRows.length} sessões, ${measurementRows.length} medições, ${feedingEventRows.length} tratos.`,
+    );
+  });
 }
 
 try {

@@ -1,6 +1,6 @@
 # Dependências do Node/pnpm
-node_modules/
-.pnpm-store/
+**/node_modules/
+**/.pnpm-store/
 
 # Variáveis de ambiente e segredos locais
 .env
@@ -9,12 +9,21 @@ node_modules/
 !.env.*.example
 
 # Artefatos de build e bundlers (Vite/TypeScript)
-dist/
-.vite/
-.cache/
-coverage/
+**/dist/
+**/build/
+**/.vite/
+**/.cache/
+**/coverage/
+**/.turbo/
 .nyc_output/
 *.tsbuildinfo
+
+# Artefatos locais de execução e ferramentas
+*.pid
+*.pid.lock
+.eslintcache
+tmp/
+temp/
 
 # Logs e arquivos temporários de gerenciadores de pacotes
 *.log
@@ -33,4 +42,3 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
-

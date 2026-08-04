@@ -31,7 +31,8 @@ confiável de ponta a ponta.
 - Genealogia, genômica, parentesco, reprodução, cio, mastite, peso e plantio estão fora do
   escopo atual.
 - Stack decidida (D-031): monólito Hono + PostgreSQL + Drizzle; frontend Vite + React 19 +
-  Tailwind; Docker (docker-compose: db `postgres:17` + app); auth por senha (`APP_PASSWORD`)
+Tailwind; Docker apenas para o banco PostGIS 17 (`fazendados-db`), com a API e
+o frontend executados por comandos no terminal; auth por senha (`APP_PASSWORD`)
   com sessão em cookie; seed manipulável (`pnpm db:seed`).
 - Backend já implementado em `fazendados/app` (22 tabelas, `/api/bootstrap` e
   `/api/commands` com idempotência e auditoria transacional).

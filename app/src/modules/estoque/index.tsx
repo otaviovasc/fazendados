@@ -1,6 +1,14 @@
 import { useState } from "react";
-import { ArrowDownToLine, ArrowUpFromLine, Plus, Trash2, Wheat } from "lucide-react";
+import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  ChevronDown,
+  Plus,
+  Trash2,
+  Wheat,
+} from "lucide-react";
 import { feedBalance, today, useFarm } from "../../state/store";
+import type { FeedItem } from "../../domain/types";
 import {
   Button,
   Card,
@@ -34,30 +42,7 @@ export default function EstoquePage() {
   const { state } = useFarm();
   const [entryOpen, setEntryOpen] = useState(false);
   const [feedingOpen, setFeedingOpen] = useState(false);
-
-  function movementsOf(itemId: string): Movement[] {
-    const entries: Movement[] = state.feedEntries
-      .filter((e) => e.itemId === itemId)
-      .map((e) => ({
-        id: e.id,
-        date: e.date,
-        kind: "entrada",
-        detail: e.note ? `${cap(e.origin)} — ${e.note}` : cap(e.origin),
-        quantity: e.quantity,
-      }));
-    const tratos: Movement[] = state.feedingEvents.flatMap((ev) =>
-      ev.items
-        .filter((i) => i.itemId === itemId)
-        .map((i) => ({
-          id: `${ev.id}_${i.itemId}`,
-          date: ev.date,
-          kind: "trato" as const,
-          detail: `Trato — ${state.groups.find((g) => g.id === ev.groupId)?.name ?? "Lote"}`,
-          quantity: i.quantity,
-        }))
-    );
-    return [...entries, ...tratos].sort((a, b) => b.date.localeCompare(a.date));
-  }
+  const [newItemOpen, setNewItemOpen] = useState(false);
 
   return (
     <div>
@@ -76,105 +61,170 @@ export default function EstoquePage() {
         }
       />
 
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <p className="text-sm text-ink-soft">
+          {state.feedItems.length === 0
+            ? "Nenhum alimento"
+            : `${state.feedItems.length} ${
+                state.feedItems.length === 1 ? "alimento" : "alimentos"
+              } — toque para ver movimentações`}
+        </p>
+        <Button variant="secondary" onClick={() => setNewItemOpen(true)}>
+          <Plus size={16} /> Novo alimento
+        </Button>
+      </div>
+
       {state.feedItems.length === 0 ? (
         <Card>
           <EmptyState
             icon={<Wheat size={32} />}
             title="Nenhum alimento cadastrado"
-            hint="Cadastre o primeiro alimento para começar a registrar entradas e tratos."
+            hint="Toque em “Novo alimento” para começar a registrar entradas e tratos."
           />
         </Card>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {state.feedItems.map((item) => {
-            const saldo = feedBalance(state, item.id);
-            const movements = movementsOf(item.id);
-            return (
-              <Card key={item.id} className="p-4 md:p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold">{item.name}</p>
-                    <p className="text-xs text-ink-faint mt-0.5">unidade: {item.unit}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
-                      Saldo
-                    </p>
-                    <p
-                      className={`text-2xl font-semibold tnum ${
-                        saldo < 0 ? "text-danger-600" : ""
-                      }`}
-                    >
-                      {formatQty(saldo, item.unit)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <SectionTitle>Movimentações</SectionTitle>
-                  {movements.length === 0 ? (
-                    <p className="text-sm text-ink-soft py-2">
-                      Nenhuma movimentação registrada.
-                    </p>
-                  ) : (
-                    <ul className="divide-y divide-black/5">
-                      {movements.map((m) => (
-                        <li key={m.id} className="flex items-center gap-3 py-2.5">
-                          <span
-                            className={`shrink-0 rounded-full p-1.5 ${
-                              m.kind === "entrada"
-                                ? "bg-pasture-100 text-pasture-700"
-                                : "bg-ink/5 text-ink-soft"
-                            }`}
-                          >
-                            {m.kind === "entrada" ? (
-                              <ArrowDownToLine size={14} />
-                            ) : (
-                              <ArrowUpFromLine size={14} />
-                            )}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm truncate">{m.detail}</p>
-                            <p className="text-xs text-ink-faint">
-                              {formatRelativeDay(m.date)}
-                            </p>
-                          </div>
-                          <span
-                            className={`text-sm font-medium tnum ${
-                              m.kind === "entrada" ? "text-pasture-700" : "text-ink"
-                            }`}
-                          >
-                            {m.kind === "entrada" ? "+" : "−"}
-                            {formatQty(m.quantity, item.unit)}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </Card>
-            );
-          })}
-        </div>
+        <Card>
+          <ul className="divide-y divide-black/5">
+            {state.feedItems.map((item) => (
+              <FeedItemRow key={item.id} item={item} />
+            ))}
+          </ul>
+        </Card>
       )}
 
-      <NewFeedItemCard />
-
+      <NewFeedItemSheet open={newItemOpen} onClose={() => setNewItemOpen(false)} />
       <FeedEntrySheet open={entryOpen} onClose={() => setEntryOpen(false)} />
       <FeedingEventSheet open={feedingOpen} onClose={() => setFeedingOpen(false)} />
     </div>
   );
 }
 
-// ---------- Novo alimento (inline) ----------
+// ---------- Linha compacta de alimento (expande p/ movimentações) ----------
 
-function NewFeedItemCard() {
+function FeedItemRow({ item }: { item: FeedItem }) {
+  const { state } = useFarm();
+  const [open, setOpen] = useState(false);
+  const saldo = feedBalance(state, item.id);
+
+  const movements: Movement[] = [
+    ...state.feedEntries
+      .filter((e) => e.itemId === item.id)
+      .map((e) => ({
+        id: e.id,
+        date: e.date,
+        kind: "entrada" as const,
+        detail: e.note ? `${cap(e.origin)} — ${e.note}` : cap(e.origin),
+        quantity: e.quantity,
+      })),
+    ...state.feedingEvents.flatMap((ev) =>
+      ev.items
+        .filter((i) => i.itemId === item.id)
+        .map((i) => ({
+          id: `${ev.id}_${i.itemId}`,
+          date: ev.date,
+          kind: "trato" as const,
+          detail: `Trato — ${state.groups.find((g) => g.id === ev.groupId)?.name ?? "Lote"}`,
+          quantity: i.quantity,
+        }))
+    ),
+  ].sort((a, b) => b.date.localeCompare(a.date));
+
+  return (
+    <li>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center gap-3 px-4 md:px-5 py-3 min-h-[56px] text-left hover:bg-ink/[0.03] transition"
+      >
+        <div className="min-w-0 flex-1">
+          <p className="font-medium truncate">{item.name}</p>
+          <p className="text-xs text-ink-faint">unidade: {item.unit}</p>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
+            Saldo
+          </p>
+          <p
+            className={`font-semibold tnum ${saldo < 0 ? "text-danger-600" : ""}`}
+          >
+            {formatQty(saldo, item.unit)}
+          </p>
+        </div>
+        <ChevronDown
+          size={18}
+          className={`shrink-0 text-ink-faint transition-transform ${
+            open ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+
+      {open && (
+        <div className="px-4 md:px-5 pb-3 pt-1 border-t border-black/5 bg-paper-sunken/40">
+          {movements.length === 0 ? (
+            <p className="text-sm text-ink-soft py-2">
+              Nenhuma movimentação registrada.
+            </p>
+          ) : (
+            <ul className="divide-y divide-black/5">
+              {movements.map((m) => (
+                <li key={m.id} className="flex items-center gap-3 py-2.5">
+                  <span
+                    className={`shrink-0 rounded-full p-1.5 ${
+                      m.kind === "entrada"
+                        ? "bg-pasture-100 text-pasture-700"
+                        : "bg-ink/5 text-ink-soft"
+                    }`}
+                  >
+                    {m.kind === "entrada" ? (
+                      <ArrowDownToLine size={14} />
+                    ) : (
+                      <ArrowUpFromLine size={14} />
+                    )}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm truncate">{m.detail}</p>
+                    <p className="text-xs text-ink-faint">
+                      {formatRelativeDay(m.date)}
+                    </p>
+                  </div>
+                  <span
+                    className={`text-sm font-medium tnum ${
+                      m.kind === "entrada" ? "text-pasture-700" : "text-ink"
+                    }`}
+                  >
+                    {m.kind === "entrada" ? "+" : "−"}
+                    {formatQty(m.quantity, item.unit)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
+// ---------- Novo alimento ----------
+
+function NewFeedItemSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { dispatch } = useFarm();
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("kg");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const valid = name.trim().length > 0 && unit.trim().length > 0;
+
+  function reset() {
+    setName("");
+    setUnit("kg");
+    setError(null);
+  }
+
+  const guard = useUnsavedGuard(name.trim() !== "" || unit !== "kg", () => {
+    reset();
+    onClose();
+  });
 
   const submit = async () => {
     if (!valid || busy) return;
@@ -190,44 +240,50 @@ function NewFeedItemCard() {
       setError(outcome.message);
       return;
     }
-    setName("");
-    setUnit("kg");
+    reset();
+    onClose();
   };
 
   return (
-    <Card className="p-4 md:p-5 mt-6">
-      <SectionTitle>Novo alimento</SectionTitle>
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
-        <div className="flex-1">
-          <Field label="Nome">
-            <input
-              className={inputCls}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="ex.: Ração lactação 18%"
-            />
-          </Field>
-        </div>
-        <div className="sm:w-32">
-          <Field label="Unidade" hint="Não pode ser alterada depois.">
-            <select
-              className={inputCls}
-              value={unit}
-              onChange={(e) => setUnit(e.target.value)}
-            >
-              <option value="kg">kg</option>
-              <option value="sc">sc</option>
-              <option value="l">l</option>
-              <option value="t">t</option>
-            </select>
-          </Field>
-        </div>
-        <Button variant="secondary" disabled={!valid || busy} onClick={submit}>
-          <Plus size={16} /> {busy ? "Adicionando…" : "Adicionar"}
-        </Button>
+    <Sheet
+      open={open}
+      onClose={guard.requestClose}
+      title="Novo alimento"
+      footer={
+        guard.asking ? (
+          <UnsavedFooter onKeepEditing={guard.keepEditing} onDiscard={guard.discard} />
+        ) : (
+          <Button className="w-full" disabled={!valid || busy} onClick={submit}>
+            {busy ? "Adicionando…" : "Adicionar alimento"}
+          </Button>
+        )
+      }
+    >
+      <div className="flex flex-col gap-4">
+        {error && <InlineError>{error}</InlineError>}
+        <Field label="Nome">
+          <input
+            className={inputCls}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="ex.: Ração lactação 18%"
+            autoFocus
+          />
+        </Field>
+        <Field label="Unidade" hint="Não pode ser alterada depois.">
+          <select
+            className={inputCls}
+            value={unit}
+            onChange={(e) => setUnit(e.target.value)}
+          >
+            <option value="kg">kg</option>
+            <option value="sc">sc</option>
+            <option value="l">l</option>
+            <option value="t">t</option>
+          </select>
+        </Field>
       </div>
-      {error && <div className="mt-3"><InlineError>{error}</InlineError></div>}
-    </Card>
+    </Sheet>
   );
 }
 
@@ -240,16 +296,21 @@ function FeedEntrySheet({ open, onClose }: { open: boolean; onClose: () => void 
   const [date, setDate] = useState(today());
   const [origin, setOrigin] = useState<string>("compra");
   const [note, setNote] = useState("");
+  const [toFinanceiro, setToFinanceiro] = useState(true);
+  const [valor, setValor] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const parsed = parseDecimal(qty);
+  const parsedValor = parseDecimal(valor);
+  const isCompra = origin === "compra";
   const valid =
     itemId !== "" &&
     parsed !== null &&
     parsed > 0 &&
     date !== "" &&
-    (origin !== "ajuste" || note.trim().length > 0);
+    (origin !== "ajuste" || note.trim().length > 0) &&
+    (!isCompra || !toFinanceiro || (parsedValor !== null && parsedValor > 0));
 
   function reset() {
     setItemId("");
@@ -257,6 +318,8 @@ function FeedEntrySheet({ open, onClose }: { open: boolean; onClose: () => void 
     setDate(today());
     setOrigin("compra");
     setNote("");
+    setToFinanceiro(true);
+    setValor("");
     setError(null);
   }
 
@@ -264,6 +327,7 @@ function FeedEntrySheet({ open, onClose }: { open: boolean; onClose: () => void 
     itemId !== "" ||
     qty.trim() !== "" ||
     note.trim() !== "" ||
+    valor.trim() !== "" ||
     origin !== "compra" ||
     date !== today();
   const guard = useUnsavedGuard(dirty, () => {
@@ -283,10 +347,29 @@ function FeedEntrySheet({ open, onClose }: { open: boolean; onClose: () => void 
       origin,
       note: note.trim() || undefined,
     });
-    setBusy(false);
     if (!outcome.ok) {
+      setBusy(false);
       setError(outcome.message);
       return;
+    }
+    if (isCompra && toFinanceiro) {
+      const item = state.feedItems.find((i) => i.id === itemId);
+      const fin = await dispatch({
+        type: "RecordFinancialEntry",
+        kind: "despesa",
+        description: `Compra — ${item?.name ?? "alimento"}${note.trim() ? ` (${note.trim()})` : ""}`,
+        amountCents: Math.round(parsedValor! * 100),
+        date,
+      });
+      setBusy(false);
+      if (!fin.ok) {
+        setError(
+          `Entrada registrada, mas o lançamento no Financeiro falhou: ${fin.message}`
+        );
+        return;
+      }
+    } else {
+      setBusy(false);
     }
     reset();
     onClose();
@@ -364,6 +447,32 @@ function FeedEntrySheet({ open, onClose }: { open: boolean; onClose: () => void 
               placeholder="ex.: quebra na pesagem, sobra de silo"
             />
           </Field>
+        )}
+        {isCompra && (
+          <div className="rounded-xl bg-paper-sunken p-3.5">
+            <label className="flex items-center gap-3 min-h-[44px] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={toFinanceiro}
+                onChange={(e) => setToFinanceiro(e.target.checked)}
+                className="size-5 accent-pasture-600"
+              />
+              <span className="text-sm font-medium">
+                Lançar a compra no Financeiro
+              </span>
+            </label>
+            {toFinanceiro && (
+              <Field label="Valor da compra (R$)">
+                <input
+                  className={`${inputCls} mt-2`}
+                  inputMode="decimal"
+                  value={valor}
+                  onChange={(e) => setValor(e.target.value)}
+                  placeholder="0,00"
+                />
+              </Field>
+            )}
+          </div>
         )}
       </div>
     </Sheet>
@@ -448,7 +557,7 @@ function FeedingEventSheet({ open, onClose }: { open: boolean; onClose: () => vo
 
         <div>
           <SectionTitle>Itens do trato</SectionTitle>
-          <div className="flex flex-col gap-3">
+          <div className="divide-y divide-black/5 border-y border-black/5">
             {rows.map((row, idx) => {
               const parsed = parseDecimal(row.qty);
               const item = state.feedItems.find((i) => i.id === row.itemId);
@@ -457,10 +566,10 @@ function FeedingEventSheet({ open, onClose }: { open: boolean; onClose: () => vo
                 parsed !== null &&
                 parsed > feedBalance(state, item.id);
               return (
-                <div key={idx} className="rounded-xl border border-black/10 p-3">
+                <div key={idx} className="py-3">
                   <div className="flex gap-2">
                     <select
-                      className={inputCls}
+                      className={`${inputCls} flex-1 min-w-0`}
                       value={row.itemId}
                       onChange={(e) => setRow(idx, { itemId: e.target.value })}
                     >
@@ -472,7 +581,7 @@ function FeedingEventSheet({ open, onClose }: { open: boolean; onClose: () => vo
                       ))}
                     </select>
                     <input
-                      className={`${inputCls} w-24 shrink-0`}
+                      className="w-24 shrink-0 rounded-xl border border-black/10 bg-white px-3 py-2.5 text-base tnum outline-none focus:border-pasture-500 focus:ring-2 focus:ring-pasture-100 transition"
                       inputMode="decimal"
                       value={row.qty}
                       onChange={(e) => setRow(idx, { qty: e.target.value })}

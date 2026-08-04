@@ -4,7 +4,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb } from '../db/client.js';
-import { idempotencyKeys } from '../db/schema.js';
+import { animals, feedItems, herdGroups, idempotencyKeys } from '../db/schema.js';
 import {
   clearLoginFailures,
   clearSessionCookie,
@@ -21,6 +21,7 @@ import {
 import { loadFarmState } from './bootstrap.js';
 import { actionSchema, executeCommand } from './commands.js';
 import { ApiError } from './http.js';
+import { interpretAssistantCapture } from './assistant.js';
 
 /** String JSON canônica (chaves ordenadas) — base da comparação de idempotência. */
 function canonicalize(value: unknown): string {
@@ -94,6 +95,31 @@ export function createApp() {
     const { farm } = c.get('auth');
     const state = await loadFarmState(getDb(), farm.id);
     return c.json({ state });
+  });
+
+  app.post('/api/assistant/interpret', async (c) => {
+    const body: unknown = await c.req.json().catch(() => null);
+    const parsed = z.object({ text: z.string().trim().min(1).max(20_000) }).safeParse(body);
+    if (!parsed.success) throw new ApiError(400, 'INVALID_CAPTURE', 'A Captura precisa conter texto.');
+    const { farm } = c.get('auth');
+    const db = getDb();
+    const [groups, animalRows, feedItemRows] = await Promise.all([
+      db.select().from(herdGroups).where(eq(herdGroups.farmId, farm.id)),
+      db.select().from(animals).where(eq(animals.farmId, farm.id)),
+      db.select().from(feedItems).where(eq(feedItems.farmId, farm.id)),
+    ]);
+    const proposals = await interpretAssistantCapture(parsed.data.text, {
+      groups: groups.map((group) => ({ name: group.name, milkingsPerDay: group.milkingsPerDay as 1 | 2 })),
+      animals: animalRows.map((animal) => ({
+        name: animal.name,
+        tag: animal.tag ?? undefined,
+      })),
+      feedItems: feedItemRows.map((item) => ({
+        name: item.name,
+        unit: item.unit,
+      })),
+    });
+    return c.json({ proposals });
   });
 
   /**

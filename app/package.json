@@ -8,15 +8,27 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "concurrently -k -n api,web -c green,cyan \"tsx watch src/server/index.ts\" \"vite\"",
+    "dev": "pnpm dev:all",
+    "dev:all": "concurrently -k -n api,web -c green,cyan \"pnpm dev:api\" \"pnpm dev:web\"",
+    "dev:api": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs watch src/server/index.ts",
+    "dev:web": "vite",
     "build": "NODE_ENV=production vite build && tsc -p tsconfig.server.json",
     "start": "node dist/server/index.js",
-    "start:container": "node dist/db/migrate.js && node dist/db/seed.js && node dist/server/index.js",
+    "start:local": "node --env-file-if-exists=.env dist/db/migrate.js && node --env-file-if-exists=.env dist/server/index.js",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "check": "pnpm typecheck && pnpm build",
     "preview": "vite preview",
+    "db:up": "docker compose up -d fazendados-db && pnpm db:wait",
+    "db:wait": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs scripts/wait-for-db.ts",
+    "db:down": "docker compose down",
+    "db:restart": "docker compose restart fazendados-db",
+    "db:logs": "docker compose logs -f fazendados-db",
+    "db:status": "docker compose ps",
+    "db:setup": "pnpm db:up && pnpm db:migrate && pnpm db:seed",
+    "db:reset": "docker compose down -v && pnpm db:setup",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/db/migrate.ts",
-    "db:seed": "tsx src/db/seed.ts"
+    "db:migrate": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs src/db/migrate.ts",
+    "db:seed": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs src/db/seed.ts"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.5",

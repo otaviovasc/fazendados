@@ -4,13 +4,7 @@ import ProducaoTab from "./ProducaoTab";
 import ControleTab from "./ControleTab";
 import ColetaTab from "./ColetaTab";
 import CompararTab from "./CompararTab";
-
-const TABS = [
-  { to: "producao", label: "Produção" },
-  { to: "controle", label: "Controle" },
-  { to: "coleta", label: "Coleta" },
-  { to: "comparar", label: "Comparar" },
-];
+import { LEITE_TABS, leiteTabPath } from "./routes";
 
 export default function LeitePage() {
   return (
@@ -21,10 +15,10 @@ export default function LeitePage() {
       />
 
       <nav className="flex gap-2 overflow-x-auto mb-5 -mx-1 px-1">
-        {TABS.map((t) => (
+        {LEITE_TABS.map((t) => (
           <NavLink
             key={t.to}
-            to={t.to}
+            to={leiteTabPath(t.to)}
             className={({ isActive }) =>
               `shrink-0 rounded-full px-4 min-h-[44px] inline-flex items-center text-sm font-medium transition ${
                 isActive
@@ -39,12 +33,18 @@ export default function LeitePage() {
       </nav>
 
       <Routes>
-        <Route index element={<Navigate to="producao" replace />} />
+        <Route
+          index
+          element={<Navigate to={leiteTabPath("producao")} replace />}
+        />
         <Route path="producao" element={<ProducaoTab />} />
         <Route path="controle" element={<ControleTab />} />
         <Route path="coleta" element={<ColetaTab />} />
         <Route path="comparar" element={<CompararTab />} />
-        <Route path="*" element={<Navigate to="producao" replace />} />
+        <Route
+          path="*"
+          element={<Navigate to={leiteTabPath("producao")} replace />}
+        />
       </Routes>
     </div>
   );

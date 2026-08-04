@@ -1,8 +1,13 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Beef, ChevronRight, Plus, Search, Users } from "lucide-react";
-import { animalsInGroup, groupOf, today, useFarm } from "../../state/store";
-import type { CommandOutcome } from "../../state/store";
+import {
+  animalsInGroup,
+  groupOf,
+  recentAnimalDailyTotals,
+  today,
+  useFarm,
+} from "../../state/store";
 import {
   Button,
   Card,
@@ -17,7 +22,8 @@ import {
   inputCls,
   useUnsavedGuard,
 } from "../../components/ui";
-import { formatLong } from "../../lib/dates";
+import { formatDay, formatLong } from "../../lib/dates";
+import { formatLiters } from "../../lib/format";
 
 /** Busca tolerante a maiúsculas e acentos. */
 const norm = (s: string) =>
@@ -29,11 +35,12 @@ const norm = (s: string) =>
 type LoteFilter = "todos" | "sem_lote" | string;
 
 export default function RebanhoPage() {
-  const { state, dispatch } = useFarm();
+  const { state } = useFarm();
   const [query, setQuery] = useState("");
   const [loteFilter, setLoteFilter] = useState<LoteFilter>("todos");
   const [showArchived, setShowArchived] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [groupSheetOpen, setGroupSheetOpen] = useState(false);
 
   const visible = useMemo(() => {
     const q = norm(query.trim());
@@ -60,10 +67,16 @@ export default function RebanhoPage() {
         title="Rebanho"
         subtitle={`${state.animals.filter((a) => a.status === "ativo").length} animais ativos`}
         action={
-          <Button onClick={() => setSheetOpen(true)}>
-            <Plus size={16} />
-            Cadastrar animal
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setGroupSheetOpen(true)}>
+              <Plus size={16} />
+              Criar lote
+            </Button>
+            <Button onClick={() => setSheetOpen(true)}>
+              <Plus size={16} />
+              Cadastrar animal
+            </Button>
+          </div>
         }
       />
 
@@ -123,11 +136,12 @@ export default function RebanhoPage() {
           <ul className="divide-y divide-black/5">
             {visible.map((a) => {
               const g = groupOf(state, a.id);
+              const recentTotals = recentAnimalDailyTotals(state, a.id);
               return (
                 <li key={a.id}>
                   <Link
                     to={`/rebanho/${a.id}`}
-                    className="flex items-center gap-3 px-4 py-3 min-h-[56px] hover:bg-ink/[0.03] transition"
+                    className="flex items-start gap-3 px-4 py-3 min-h-[72px] hover:bg-ink/[0.03] transition"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="font-medium truncate">{a.name}</p>
@@ -135,9 +149,16 @@ export default function RebanhoPage() {
                         {a.tag ? `${a.tag} · ` : ""}
                         {g ? g.name : "Sem lote"}
                       </p>
+                      <p className="mt-0.5 text-xs text-ink-faint tnum">
+                        {recentTotals.length === 0
+                          ? "Sem medições individuais"
+                          : `Últimos controles · ${recentTotals
+                              .map((total) => `${formatDay(total.date)} ${formatLiters(total.liters)}`)
+                              .join(" · ")}`}
+                      </p>
                     </div>
                     {a.status === "arquivado" && <Chip tone="neutro">arquivado</Chip>}
-                    <ChevronRight size={18} className="text-ink-faint shrink-0" />
+                    <ChevronRight size={18} className="mt-1.5 text-ink-faint shrink-0" />
                   </Link>
                 </li>
               );
@@ -165,7 +186,7 @@ export default function RebanhoPage() {
           <EmptyState
             icon={<Users size={28} />}
             title="Nenhum lote ainda"
-            hint="Crie o primeiro lote abaixo para organizar os animais."
+            hint="Toque em “Criar lote” acima para organizar os animais."
           />
         ) : (
           <ul className="divide-y divide-black/5">
@@ -185,13 +206,12 @@ export default function RebanhoPage() {
             })}
           </ul>
         )}
-        <NewGroupForm
-          onCreate={(name, milkingsPerDay) =>
-            dispatch({ type: "CreateHerdGroup", name, milkingsPerDay })
-          }
-        />
       </Card>
 
+      <NewGroupSheet
+        open={groupSheetOpen}
+        onClose={() => setGroupSheetOpen(false)}
+      />
       <CadastrarAnimalSheet open={sheetOpen} onClose={() => setSheetOpen(false)} />
     </div>
   );
@@ -220,76 +240,108 @@ function FilterChip({
   );
 }
 
-function NewGroupForm({
-  onCreate,
+export function NewGroupSheet({
+  open,
+  onClose,
 }: {
-  onCreate: (name: string, milkingsPerDay: 1 | 2) => Promise<CommandOutcome>;
+  open: boolean;
+  onClose: () => void;
 }) {
+  const { dispatch } = useFarm();
   const [name, setName] = useState("");
   const [milkingsPerDay, setMilkingsPerDay] = useState<1 | 2>(2);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const reset = () => {
+    setName("");
+    setMilkingsPerDay(2);
+    setError(null);
+  };
+
+  const guard = useUnsavedGuard(name.trim() !== "", () => {
+    reset();
+    onClose();
+  });
 
   const submit = async () => {
     const n = name.trim();
     if (!n || busy) return;
     setBusy(true);
     setError(null);
-    const outcome = await onCreate(n, milkingsPerDay);
+    const outcome = await dispatch({
+      type: "CreateHerdGroup",
+      name: n,
+      milkingsPerDay,
+    });
     setBusy(false);
     if (!outcome.ok) {
       setError(outcome.message);
       return;
     }
-    setName("");
+    reset();
+    onClose();
   };
+
   return (
-    <div className="border-t border-black/5 px-4 py-3 flex flex-col gap-3">
-      <div className="flex gap-2">
-        <input
-          className={inputCls}
-          placeholder="Nome do novo lote"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-        />
-        <Button
-          variant="secondary"
-          onClick={submit}
-          disabled={!name.trim() || busy}
-        >
-          {busy ? "Criando…" : "Criar lote"}
-        </Button>
+    <Sheet
+      open={open}
+      onClose={guard.requestClose}
+      title="Criar lote"
+      footer={
+        guard.asking ? (
+          <UnsavedFooter onKeepEditing={guard.keepEditing} onDiscard={guard.discard} />
+        ) : (
+          <Button
+            className="w-full"
+            onClick={submit}
+            disabled={!name.trim() || busy}
+          >
+            {busy ? "Criando…" : "Criar lote"}
+          </Button>
+        )
+      }
+    >
+      <div className="flex flex-col gap-4">
+        {error && <InlineError>{error}</InlineError>}
+        <Field label="Nome">
+          <input
+            className={inputCls}
+            placeholder="Ex.: Lote 3"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            autoFocus
+          />
+        </Field>
+        <Field label="Ordenhas por dia">
+          <div
+            role="group"
+            aria-label="Ordenhas por dia"
+            className="inline-flex rounded-xl bg-paper-sunken p-1"
+          >
+            {([1, 2] as const).map((v) => {
+              const active = milkingsPerDay === v;
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setMilkingsPerDay(v)}
+                  className={`min-h-[44px] px-4 rounded-lg text-sm font-medium transition ${
+                    active
+                      ? "bg-paper-card text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
+                      : "text-ink-soft hover:text-ink"
+                  }`}
+                >
+                  {v}×
+                </button>
+              );
+            })}
+          </div>
+        </Field>
       </div>
-      {error && <InlineError>{error}</InlineError>}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-sm text-ink-soft">Ordenhas por dia:</span>
-        <div
-          role="group"
-          aria-label="Ordenhas por dia"
-          className="inline-flex rounded-xl bg-paper-sunken p-1"
-        >
-          {([1, 2] as const).map((v) => {
-            const active = milkingsPerDay === v;
-            return (
-              <button
-                key={v}
-                type="button"
-                aria-pressed={active}
-                onClick={() => setMilkingsPerDay(v)}
-                className={`min-h-[44px] px-4 rounded-lg text-sm font-medium transition ${
-                  active
-                    ? "bg-paper-card text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
-                    : "text-ink-soft hover:text-ink"
-                }`}
-              >
-                {v}×
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }
 

@@ -2,6 +2,7 @@
 // POST /api/commands com idempotencyKey; a sessão viaja em cookie httpOnly.
 import type { FarmState } from "../domain/types";
 import type { Action } from "./actions";
+import type { ProposalInput } from "./actions";
 
 /** Erro tipado devolvido pela API (4xx/5xx com corpo { error: { code, message } }). */
 export class ApiRequestError extends Error {
@@ -78,6 +79,14 @@ export async function sendCommand(idempotencyKey: string, action: Action): Promi
     body: JSON.stringify({ idempotencyKey, action }),
   });
   return body.result;
+}
+
+export async function interpretAssistantCapture(text: string): Promise<ProposalInput[]> {
+  const body = await request<{ proposals: ProposalInput[] }>("/api/assistant/interpret", {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+  return body.proposals;
 }
 
 export async function apiLogin(password: string): Promise<void> {

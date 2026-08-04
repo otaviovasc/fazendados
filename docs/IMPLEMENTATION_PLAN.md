@@ -11,8 +11,9 @@ atual do repositório: o protótipo está aprovado (decisões em
 - Backend completo em `fazendados/app`: monólito Hono + PostgreSQL + Drizzle,
   22 tabelas, `/api/bootstrap` (carga inicial) e `/api/commands` (mutações com
   idempotência e auditoria transacional), auth por senha (`APP_PASSWORD`) com
-  sessão em cookie, seed manipulável (`pnpm db:seed`), `Dockerfile` e
-  `docker-compose.yml` (db `postgres:17` + app).
+  sessão em cookie, seed manipulável (`pnpm db:seed`) e `docker-compose.yml`
+  somente para o banco PostGIS 17 (`fazendados-db`). A API e o frontend rodam
+  por comandos no terminal.
 - Frontend do protótipo (`fazendados/app/src`): os 8 módulos navegáveis
   (`inicio`, `rebanho`, `leite`, `mapa`, `estoque`, `financeiro`, `assistente`,
   `analise`) com a UX aprovada, hoje alimentados por mocks
@@ -56,10 +57,11 @@ Verificação:
 ```bash
 pnpm typecheck
 pnpm build
-docker compose up -d --build
-curl -s -c /tmp/fd.jar -X POST localhost:3000/api/login -d '{"password":"..."}' -H 'content-type: application/json'
-curl -s -b /tmp/fd.jar localhost:3000/api/bootstrap | head -c 400
-curl -s -b /tmp/fd.jar -X POST localhost:3000/api/commands -H 'content-type: application/json' \
+pnpm db:setup
+pnpm dev
+curl -s -c /tmp/fd.jar -X POST localhost:3001/api/login -d '{"password":"..."}' -H 'content-type: application/json'
+curl -s -b /tmp/fd.jar localhost:3001/api/bootstrap | head -c 400
+curl -s -b /tmp/fd.jar -X POST localhost:3001/api/commands -H 'content-type: application/json' \
   -d '{"idempotencyKey":"smoke-1","command":"RecordDailyMilkProduction","payload":{"date":"2026-08-04","liters":312.5}}'
 ```
 
@@ -100,8 +102,8 @@ pnpm typecheck && pnpm build
 
 Critérios de aceite:
 
-- `docker compose up` limpo (volumes removidos) sobe db + app, migra, semeia e
-  responde.
+- `pnpm db:reset` recria o banco Docker, `pnpm db:seed` é reexecutável e
+  `pnpm dev` sobe API e frontend no terminal.
 - Smoke de todos os fluxos: login → bootstrap → produção diária → controle (2
   turnos) → coleta → trato → financeiro (previsto/liquidado) → correção com
   motivo → assistente (captura → revisão → confirmação) → auditoria visível.
@@ -113,8 +115,9 @@ Critérios de aceite:
 Verificação:
 
 ```bash
-docker compose down -v && docker compose up -d --build
-curl -s localhost:3000/api/health  # ou rota equivalente
+pnpm db:reset
+pnpm dev
+curl -s localhost:3001/api/ready
 grep -rn "Fazenda[D]ados" . --exclude-dir=node_modules --exclude-dir=.git
 ```
 
@@ -122,15 +125,19 @@ grep -rn "Fazenda[D]ados" . --exclude-dir=node_modules --exclude-dir=.git
 
 Na ordem, após W1–W3 estáveis:
 
-1. **Mapa real** (Marco 6): desenho/edição de polígonos de Pastos e pontos de
-   Instalações persistidos, mover Lote entre Pastos (1:1 por vez, D-028),
-   Leaflet + satélite ESRI.
-2. **PostGIS** quando o mapa chegar: migrar geometria de JSONB para `geometry`
-   (D-016), mantendo GeoJSON só no transporte.
-3. **Assistente real**: LLM substitui a heurística mock de interpretação. O
-   contrato Captura → Proposta → Revisão → Confirmação já vale — trocar apenas o
-   intérprete, preservando confiança por campo (ack gating depende dela),
-   Captura imutável e execução pelos mesmos comandos manuais.
+1. **Mapa real** (Marco 6): perímetro oficial, desenho/edição de polígonos de
+   Pastos e pontos de Instalações persistidos, mover Lote entre Pastos (1:1 por
+   vez, D-028), Leaflet + satélite ESRI. O seed real do sitio-cafezinho traz o
+   perímetro e 14 Pastos; Instalações e Ocupações ficam para registro manual.
+2. **PostGIS**: concluído na migration `0001_postgis_real_map`, convertendo
+   JSONB para `geometry` com SRID 4326, validação e índices GiST; GeoJSON fica
+   só no transporte.
+3. **Assistente real**: concluído com endpoint autenticado que chama OpenRouter
+   via Chat Completions fora da transação, injeta contexto de rótulos da
+   Fazenda, valida intents com schema, tenta reparar JSON inválido e converte
+   ações múltiplas em Propostas. O contrato Captura → Proposta → Revisão →
+   Confirmação permanece, assim como a Captura imutável, confiança por campo e
+   execução pelos comandos existentes.
 
 ## Regras do swarm
 

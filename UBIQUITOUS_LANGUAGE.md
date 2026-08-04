@@ -17,9 +17,10 @@
 | **Lote** | Grupo operacional de animais manejados juntos em um período. | Grupo, rebanho, turma |
 | **Lotação** | Período datado em que um Animal pertence a um Lote. | Vínculo atual, grupo atual |
 | **Pasto** | Área física mapeada destinada à ocupação temporária de um Lote. | Piquete, zona, polígono |
+| **Perímetro da Fazenda** | Polígono oficial que delimita a área operacional da Fazenda. | Limite inferido, borda do mapa |
 | **Ocupação de pasto** | Período datado em que um Lote ocupa um Pasto. | Localização do lote |
 | **Instalação** | Estrutura física mapeada da Fazenda, como curral, tanque ou depósito. | Prédio, ponto, marcador |
-| **Mapa da Fazenda** | Representação espacial dos Pastos e Instalações da Fazenda. | Jogo, mapa gamificado |
+| **Mapa da Fazenda** | Representação espacial do Perímetro, Pastos, Instalações e Ocupações confirmados da Fazenda. | Jogo, mapa gamificado |
 | **Imagem de satélite** | Camada cartográfica externa usada como referência visual no Mapa da Fazenda; não é um fato operacional. | Perímetro oficial, ocupação inferida |
 
 ## Leite

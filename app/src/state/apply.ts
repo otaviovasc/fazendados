@@ -21,6 +21,7 @@ import type {
   FeedEntry,
   FeedItem,
   FinancialEntry,
+  FarmBoundary,
   HerdGroup,
   IndividualMilkMeasurement,
   Installation,
@@ -105,8 +106,10 @@ type CommandResult = {
   feedEntry?: FeedEntry;
   feedingEvent?: FeedingEvent;
   financialEntry?: FinancialEntry;
+  farmBoundary?: FarmBoundary;
   capture?: AssistantCapture;
   proposal?: AssistantProposal;
+  proposals?: AssistantProposal[];
 };
 
 export function applyCommandResult(s: FarmState, a: Action, result: unknown): FarmState {
@@ -129,7 +132,19 @@ export function applyCommandResult(s: FarmState, a: Action, result: unknown): Fa
     next = { ...next, feedingEvents: upsertById(next.feedingEvents, r.feedingEvent) };
   if (r.financialEntry)
     next = { ...next, financialEntries: upsertById(next.financialEntries, r.financialEntry) };
+  if (r.farmBoundary) next = { ...next, farmBoundary: r.farmBoundary };
   if (r.capture) next = { ...next, captures: [r.capture, ...next.captures] };
+  if (r.proposals) {
+    next = r.proposals.reduce(
+      (state, proposal) => ({
+        ...state,
+        proposals: state.proposals.some((p) => p.id === proposal.id)
+          ? upsertById(state.proposals, proposal)
+          : [proposal, ...state.proposals],
+      }),
+      next,
+    );
+  }
   if (r.proposal) {
     next = next.proposals.some((p) => p.id === r.proposal!.id)
       ? { ...next, proposals: upsertById(next.proposals, r.proposal) }

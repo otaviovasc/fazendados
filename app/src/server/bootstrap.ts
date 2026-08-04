@@ -1,4 +1,4 @@
-import { asc, desc, eq, inArray } from 'drizzle-orm';
+import { asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import {
   animalGroupAssignments,
@@ -14,11 +14,9 @@ import {
   financialEntries,
   herdGroups,
   individualMilkMeasurements,
-  installations,
   milkCollections,
   milkControlSessions,
   pastureOccupancies,
-  pastures,
 } from '../db/schema.js';
 import type { FarmState } from '../domain/types.js';
 import {
@@ -28,6 +26,7 @@ import {
   toCapture,
   toDailyMilkProduction,
   toFarm,
+  toFarmBoundary,
   toFeedEntry,
   toFeedingEvent,
   toFeedItem,
@@ -43,6 +42,10 @@ import {
   toUser,
 } from './mappers.js';
 
+type SpatialPastureRow = { id: string; farmId: string; name: string; polygon: unknown };
+type SpatialInstallationRow = { id: string; farmId: string; name: string; type: string; point: unknown };
+type SpatialBoundaryRow = { id: string; farmId: string; name: string; boundary: unknown };
+
 /** Ordenação natural por id (a1, a2, … a10) — reproduz a ordem do gerador de seeds. */
 const byNaturalId = <T extends { id: string }>(rows: T[]): T[] =>
   [...rows].sort((a, b) => a.id.localeCompare(b.id, 'en', { numeric: true }));
@@ -56,8 +59,9 @@ export async function loadFarmState(db: Db, farmId: string): Promise<FarmState> 
   const [
     animalRows,
     groupRows,
-    pastureRows,
-    installationRows,
+    boundaryResult,
+    pastureResult,
+    installationResult,
     productionRows,
     sessionRows,
     collectionRows,
@@ -70,8 +74,12 @@ export async function loadFarmState(db: Db, farmId: string): Promise<FarmState> 
   ] = await Promise.all([
     db.select().from(animals).where(eq(animals.farmId, farmId)).orderBy(asc(animals.id)),
     db.select().from(herdGroups).where(eq(herdGroups.farmId, farmId)).orderBy(asc(herdGroups.id)),
-    db.select().from(pastures).where(eq(pastures.farmId, farmId)).orderBy(asc(pastures.id)),
-    db.select().from(installations).where(eq(installations.farmId, farmId)).orderBy(asc(installations.id)),
+    db.execute(sql`SELECT id, farm_id AS "farmId", name, ST_AsGeoJSON(boundary)::jsonb AS boundary
+      FROM farm_boundaries WHERE farm_id = ${farmId} LIMIT 1`),
+    db.execute(sql`SELECT id, farm_id AS "farmId", name, ST_AsGeoJSON(polygon)::jsonb AS polygon
+      FROM pastures WHERE farm_id = ${farmId} ORDER BY id`),
+    db.execute(sql`SELECT id, farm_id AS "farmId", name, type, ST_AsGeoJSON(point)::jsonb AS point
+      FROM installations WHERE farm_id = ${farmId} ORDER BY id`),
     db.select().from(dailyMilkProductions).where(eq(dailyMilkProductions.farmId, farmId)).orderBy(asc(dailyMilkProductions.date)),
     db.select().from(milkControlSessions).where(eq(milkControlSessions.farmId, farmId)).orderBy(asc(milkControlSessions.date), asc(milkControlSessions.groupId), asc(milkControlSessions.shift)),
     db.select().from(milkCollections).where(eq(milkCollections.farmId, farmId)).orderBy(asc(milkCollections.date)),
@@ -82,6 +90,10 @@ export async function loadFarmState(db: Db, farmId: string): Promise<FarmState> 
     db.select().from(assistantCaptures).where(eq(assistantCaptures.farmId, farmId)).orderBy(desc(assistantCaptures.createdAt)),
     db.select().from(auditEvents).where(eq(auditEvents.farmId, farmId)).orderBy(desc(auditEvents.at), desc(auditEvents.id)),
   ]);
+
+  const boundaryRows = boundaryResult.rows as SpatialBoundaryRow[];
+  const pastureRows = pastureResult.rows as SpatialPastureRow[];
+  const installationRows = installationResult.rows as SpatialInstallationRow[];
 
   const animalIds = animalRows.map((a) => a.id);
   const groupIds = groupRows.map((g) => g.id);
@@ -117,11 +129,12 @@ export async function loadFarmState(db: Db, farmId: string): Promise<FarmState> 
   return {
     farm: toFarm(farmRow),
     user: toUser(userRow),
+    farmBoundary: boundaryRows[0] ? toFarmBoundary(boundaryRows[0] as never) : null,
     animals: byNaturalId(animalRows).map(toAnimal),
     groups: byNaturalId(groupRows).map(toHerdGroup),
     assignments: byNaturalId(assignmentRows).map(toAssignment),
-    pastures: byNaturalId(pastureRows).map(toPasture),
-    installations: byNaturalId(installationRows).map(toInstallation),
+    pastures: byNaturalId(pastureRows).map((row) => toPasture(row as never)),
+    installations: byNaturalId(installationRows).map((row) => toInstallation(row as never)),
     occupancies: byNaturalId(occupancyRows).map(toOccupancy),
     productions: productionRows.map(toDailyMilkProduction),
     sessions: sessionRows.map(toMilkControlSession),

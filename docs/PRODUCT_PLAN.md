@@ -84,7 +84,8 @@ vigentes:
 
 **Status:** stack decidida (D-031) e backend já implementado em `fazendados/app`
 — monólito Hono + PostgreSQL + Drizzle, frontend Vite + React 19 + Tailwind,
-Docker (docker-compose: db `postgres:17` + app), auth por senha (`APP_PASSWORD`)
+Docker apenas para o banco PostGIS 17 (`fazendados-db`), com a aplicação
+executada por comando no terminal, auth por senha (`APP_PASSWORD`)
 com sessão em cookie, seed manipulável (`pnpm db:seed`). O plano de execução da
 implementação está em `docs/IMPLEMENTATION_PLAN.md`.
 

@@ -10,7 +10,7 @@ semanticamente alinhados.
 | --- | --- | --- |
 | Identidade | Autenticar e resolver a fronteira de dados | Usuário, Fazenda, Sessão |
 | Rebanho | Identificar animais e manejo em grupos | Animal, Lote, Lotação |
-| Espaço | Representar a fazenda física e ocupações | Mapa, Pasto, Instalação, Ocupação |
+| Espaço | Representar a fazenda física e ocupações | Mapa, Perímetro da Fazenda, Pasto, Instalação, Ocupação |
 | Leite | Registrar fatos independentes de leite | Produção diária, Controle, Turno, Medição, Coleta |
 | Análise leiteira | Comparar fatos confirmados sem extrapolar lacunas | Desempenho leiteiro, Cobertura, Tendência |
 | Alimentação | Registrar entradas e consumo | Alimento, Entrada, Trato, Item do trato, Saldo |
@@ -24,6 +24,7 @@ flowchart LR
   U[Usuário] -->|pertence a| F[Fazenda]
   F --> A[Animais]
   F --> L[Lotes]
+  F --> B[Perímetro da Fazenda]
   F --> P[Pastos]
   F --> I[Instalações]
   A -->|Lotação datada| L
@@ -95,7 +96,9 @@ flowchart LR
     automática de descarte.
 17. A Imagem de satélite é uma referência cartográfica externa. Ela não
     substitui a geometria confirmada de Pasto/Instalação nem cria Ocupação.
-18. Ausência de Medição em um Turno permanece ausência: nunca vira zero.
+18. O Perímetro da Fazenda é um único polígono oficial por Fazenda, editável
+    por comando explícito e auditado; sua ausência não é inferida da imagem.
+19. Ausência de Medição em um Turno permanece ausência: nunca vira zero.
 
 ## Modelo relacional mínimo recomendado
 
@@ -103,7 +106,7 @@ flowchart LR
 - `users` com `farm_id` obrigatório e único no V1
 - `animals` (nome/brinco + status ativo/arquivado), `herd_groups` (com
   `milkings_per_day`), `animal_group_assignments`
-- `pastures`, `installations`, `pasture_occupancies`
+- `farm_boundaries`, `pastures`, `installations`, `pasture_occupancies`
 - `daily_milk_productions` (única por `farm_id` + data)
 - `milk_control_sessions` (única por Lote + data + turno),
   `individual_milk_measurements` (única por sessão + animal)

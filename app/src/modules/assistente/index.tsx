@@ -1,33 +1,28 @@
 import { useEffect, useState } from "react";
 import {
   ArrowRight,
-  Camera,
   CheckCircle2,
   Hash,
   Inbox,
-  Mic,
   Send,
   Sparkles,
   X,
 } from "lucide-react";
 import type { AssistantProposal } from "../../domain/types";
 import { captureOf, pendingProposals, useFarm } from "../../state/store";
+import { interpretAssistantCapture } from "../../state/api";
 import {
   Button,
   Card,
   Chip,
   EmptyState,
   FactNatureChip,
+  InlineError,
   PageHeader,
   SectionTitle,
 } from "../../components/ui";
-import { interpretCapture } from "./interpret";
 import { ReviewSheet } from "./ReviewSheet";
 import { KIND_LABEL, formatWhen } from "./helpers";
-
-const CANNED_AUDIO =
-  "controle de ontem, lote 1 manhã: mimosa 7, estrela 9,8, brinco 300 8,9";
-const CANNED_PHOTO = "laticínio passou às 10 e 40 e levou 410 litros";
 
 interface Toast {
   message: string;
@@ -36,32 +31,32 @@ interface Toast {
 export default function AssistentePage() {
   const { state, dispatch } = useFarm();
   const [text, setText] = useState("");
-  const [simNote, setSimNote] = useState<string | null>(null);
   const [reviewId, setReviewId] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [interpreting, setInterpreting] = useState(false);
+  const [interpretError, setInterpretError] = useState<string | null>(null);
 
   const pending = pendingProposals(state);
   const history = state.proposals.filter((p) => p.status !== "pendente");
 
-  const simulate = (kind: "audio" | "foto") => {
-    setSimNote(
-      kind === "audio"
-        ? "Simulação de áudio — transcrição inserida abaixo."
-        : "Simulação de foto — leitura da imagem inserida abaixo."
-    );
-    setText(kind === "audio" ? CANNED_AUDIO : CANNED_PHOTO);
-  };
-
-  const submit = () => {
+  const submit = async () => {
     const t = text.trim();
-    if (!t) return;
-    dispatch({
-      type: "CreateAssistantCapture",
-      text: t,
-      proposal: interpretCapture(t, state),
-    });
-    setText("");
-    setSimNote(null);
+    if (!t || interpreting) return;
+    setInterpreting(true);
+    setInterpretError(null);
+    try {
+      const proposals = await interpretAssistantCapture(t);
+      const outcome = await dispatch({ type: "CreateAssistantCapture", text: t, proposals });
+      if (!outcome.ok) {
+        setInterpretError(outcome.message);
+        return;
+      }
+      setText("");
+    } catch (error) {
+      setInterpretError(error instanceof Error ? error.message : "Não foi possível gerar a Proposta.");
+    } finally {
+      setInterpreting(false);
+    }
   };
 
   // Fila: após a Confirmação, avança para a próxima Proposta pendente.
@@ -82,7 +77,7 @@ export default function AssistentePage() {
     <div className="max-w-3xl">
       <PageHeader
         title="Assistente"
-        subtitle="Fale ou escreva o que aconteceu; revise antes de virar Registro."
+        subtitle="Escreva o que aconteceu; revise antes de virar Registro."
       />
 
       {/* Legenda das naturezas de dado */}
@@ -110,28 +105,18 @@ export default function AssistentePage() {
           onChange={(e) => setText(e.target.value)}
           aria-label="Texto da captura"
         />
-        {simNote && (
-          <p className="text-xs text-ink-faint mt-2 italic">{simNote}</p>
-        )}
+        <p className="text-xs text-ink-faint mt-2">
+          A Captura por texto está disponível. Áudio e foto aparecerão quando
+          transcrição e leitura de imagem estiverem conectadas ao mesmo pipeline.
+        </p>
+        {interpretError && <div className="mt-3"><InlineError>{interpretError}</InlineError></div>}
         <div className="flex items-center gap-2 mt-3">
-          <button
-            onClick={() => simulate("audio")}
-            className="inline-flex items-center justify-center gap-2 rounded-xl px-3 min-h-[44px] text-sm font-medium text-ink-soft hover:bg-ink/5 transition"
-          >
-            <Mic size={17} /> Áudio
-          </button>
-          <button
-            onClick={() => simulate("foto")}
-            className="inline-flex items-center justify-center gap-2 rounded-xl px-3 min-h-[44px] text-sm font-medium text-ink-soft hover:bg-ink/5 transition"
-          >
-            <Camera size={17} /> Foto
-          </button>
           <Button
             className="ml-auto"
-            disabled={!text.trim()}
+            disabled={!text.trim() || interpreting}
             onClick={submit}
           >
-            <Send size={15} /> Gerar proposta
+            <Send size={15} /> {interpreting ? "Interpretando…" : "Gerar proposta"}
           </Button>
         </div>
       </Card>

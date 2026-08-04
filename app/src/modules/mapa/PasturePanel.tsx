@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { Pencil, X } from "lucide-react";
 import { Card, Chip, SectionTitle } from "../../components/ui";
 import { formatDay, formatLong } from "../../lib/dates";
 import { animalsInGroup, useFarm } from "../../state/store";
@@ -11,10 +11,11 @@ import {
 interface PasturePanelProps {
   pastureId: string;
   onClose: () => void;
+  onEdit: (pastureId: string) => void;
 }
 
 /** Painel de detalhe do pasto: ocupação atual e histórico datado. */
-export function PasturePanel({ pastureId, onClose }: PasturePanelProps) {
+export function PasturePanel({ pastureId, onClose, onEdit }: PasturePanelProps) {
   const { state } = useFarm();
   const pasture = state.pastures.find((p) => p.id === pastureId);
   if (!pasture) return null;
@@ -42,13 +43,23 @@ export function PasturePanel({ pastureId, onClose }: PasturePanelProps) {
             )}
           </div>
         </div>
-        <button
-          onClick={onClose}
-          className="p-2 -m-1 text-ink-soft"
-          aria-label="Fechar detalhes do pasto"
-        >
-          <X size={18} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => onEdit(pastureId)}
+            className="p-2 -m-1 text-ink-soft"
+            aria-label="Editar pasto"
+            title="Editar pasto"
+          >
+            <Pencil size={17} />
+          </button>
+          <button
+            onClick={onClose}
+            className="p-2 -m-1 text-ink-soft"
+            aria-label="Fechar detalhes do pasto"
+          >
+            <X size={18} />
+          </button>
+        </div>
       </div>
 
       <SectionTitle>Ocupação atual</SectionTitle>

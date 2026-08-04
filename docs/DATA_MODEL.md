@@ -163,6 +163,18 @@ fornecida por uma camada cartográfica externa e não deve ser copiada para o
 banco nem usada para inferir automaticamente limite, Pasto, Instalação ou
 Ocupação. A API pode receber e devolver GeoJSON.
 
+### `farm_boundaries`
+
+| Campo | Tipo | Regra |
+| --- | --- | --- |
+| `id`, `farm_id` | text | PK e Fazenda proprietária |
+| `name` | text | rótulo operacional |
+| `boundary` | geometry(Polygon, 4326) | único por Fazenda e válido |
+
+O seed real do `sitio-cafezinho` importa o perímetro e os Pastos, mas não
+importa Instalações nem Ocupações: não há correspondência confiável para esses
+fatos na fonte fornecida.
+
 ### `pastures`
 
 | Campo | Tipo | Regra |
