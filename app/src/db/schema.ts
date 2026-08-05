@@ -29,6 +29,17 @@ const pointGeometry = customType<{ data: string; driverData: string }>({
   },
 });
 
+/**
+ * Metadados técnicos comuns a toda tabela.
+ *
+ * O default cobre inserts; a migration instala uma trigger PostgreSQL única
+ * para manter `updated_at` correto em qualquer update, inclusive fora do ORM.
+ */
+const standardTimestamps = () => ({
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+
 // ---------------------------------------------------------------------------
 // FazenDados — modelo físico V1.
 // Uma Fazenda é dona de tudo: toda tabela operacional tem farm_id.
@@ -40,6 +51,7 @@ const pointGeometry = customType<{ data: string; driverData: string }>({
 export const farms = pgTable('farms', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
+  ...standardTimestamps(),
 });
 
 export const users = pgTable(
@@ -54,6 +66,7 @@ export const users = pgTable(
     username: text('username').notNull(),
     /** Null somente para conta legada, que deve passar por redefinição de senha. */
     passwordHash: text('password_hash'),
+    ...standardTimestamps(),
   },
   (t) => [
     uniqueIndex('users_farm_id_unique').on(t.farmId),
@@ -69,8 +82,8 @@ export const authSessions = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => users.id),
-    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
+    ...standardTimestamps(),
   },
   (t) => [index('sessions_expires_at_idx').on(t.expiresAt)],
 );
@@ -89,6 +102,7 @@ export const animals = pgTable(
     status: text('status').notNull(), // "ativo" | "arquivado"
     archivedAt: date('archived_at', { mode: 'string' }),
     archiveReason: text('archive_reason'),
+    ...standardTimestamps(),
   },
   (t) => [index('animals_farm_id_idx').on(t.farmId)],
 );
@@ -102,6 +116,7 @@ export const herdGroups = pgTable(
       .references(() => farms.id),
     name: text('name').notNull(),
     milkingsPerDay: integer('milkings_per_day').notNull(), // 1 | 2
+    ...standardTimestamps(),
   },
   (t) => [index('herd_groups_farm_id_idx').on(t.farmId)],
 );
@@ -119,6 +134,7 @@ export const animalGroupAssignments = pgTable(
       .references(() => herdGroups.id),
     start: date('start', { mode: 'string' }).notNull(),
     end: date('end', { mode: 'string' }),
+    ...standardTimestamps(),
   },
   (t) => [
     index('assignments_animal_open_idx').on(t.animalId, t.end),
@@ -137,6 +153,7 @@ export const farmBoundaries = pgTable(
       .references(() => farms.id),
     name: text('name').notNull(),
     boundary: polygonGeometry('boundary').notNull(),
+    ...standardTimestamps(),
   },
   (t) => [uniqueIndex('farm_boundaries_farm_unique').on(t.farmId)],
 );
@@ -150,6 +167,7 @@ export const pastures = pgTable(
       .references(() => farms.id),
     name: text('name').notNull(),
     polygon: polygonGeometry('polygon').notNull(),
+    ...standardTimestamps(),
   },
   (t) => [index('pastures_farm_id_idx').on(t.farmId)],
 );
@@ -164,6 +182,7 @@ export const installations = pgTable(
     name: text('name').notNull(),
     type: text('type').$type<InstallationType>().notNull(),
     point: pointGeometry('point').notNull(),
+    ...standardTimestamps(),
   },
   (t) => [index('installations_farm_id_idx').on(t.farmId)],
 );
@@ -181,6 +200,7 @@ export const pastureOccupancies = pgTable(
       .references(() => pastures.id),
     start: date('start', { mode: 'string' }).notNull(),
     end: date('end', { mode: 'string' }),
+    ...standardTimestamps(),
   },
   (t) => [
     index('occupancies_group_open_idx').on(t.groupId, t.end),
@@ -201,6 +221,7 @@ export const dailyMilkProductions = pgTable(
     date: date('date', { mode: 'string' }).notNull(),
     liters: numeric('liters', { precision: 10, scale: 1, mode: 'number' }).notNull(),
     origin: text('origin').notNull(), // "manual" | "assistente"
+    ...standardTimestamps(),
   },
   (t) => [uniqueIndex('daily_milk_productions_farm_date_unique').on(t.farmId, t.date)],
 );
@@ -220,6 +241,7 @@ export const milkControlSessions = pgTable(
     shift: text('shift').notNull(), // "manha" | "tarde" | "unica"
     status: text('status').notNull(), // "em_andamento" | "concluido"
     origin: text('origin').notNull(),
+    ...standardTimestamps(),
   },
   (t) => [
     uniqueIndex('milk_control_sessions_group_date_shift_unique').on(t.groupId, t.date, t.shift),
@@ -238,6 +260,7 @@ export const individualMilkMeasurements = pgTable(
       .notNull()
       .references(() => animals.id),
     liters: numeric('liters', { precision: 6, scale: 1, mode: 'number' }).notNull(),
+    ...standardTimestamps(),
   },
   (t) => [
     uniqueIndex('individual_milk_measurements_session_animal_unique').on(t.sessionId, t.animalId),
@@ -256,6 +279,7 @@ export const milkCollections = pgTable(
     time: text('time').notNull(), // "10:40"
     liters: numeric('liters', { precision: 10, scale: 1, mode: 'number' }).notNull(),
     origin: text('origin').notNull(),
+    ...standardTimestamps(),
   },
   (t) => [index('milk_collections_farm_date_idx').on(t.farmId, t.date)],
 );
@@ -271,6 +295,7 @@ export const feedItems = pgTable(
       .references(() => farms.id),
     name: text('name').notNull(),
     unit: text('unit').notNull(),
+    ...standardTimestamps(),
   },
   (t) => [index('feed_items_farm_id_idx').on(t.farmId)],
 );
@@ -289,6 +314,7 @@ export const feedEntries = pgTable(
     quantity: numeric('quantity', { precision: 12, scale: 1, mode: 'number' }).notNull(),
     origin: text('origin').notNull(), // "compra", "estoque inicial", "ajuste" (string livre)
     note: text('note'),
+    ...standardTimestamps(),
   },
   (t) => [index('feed_entries_farm_item_idx').on(t.farmId, t.itemId)],
 );
@@ -305,6 +331,7 @@ export const feedingEvents = pgTable(
       .references(() => herdGroups.id),
     date: date('date', { mode: 'string' }).notNull(),
     origin: text('origin').notNull(),
+    ...standardTimestamps(),
   },
   (t) => [index('feeding_events_farm_date_idx').on(t.farmId, t.date)],
 );
@@ -321,6 +348,7 @@ export const feedingEventItems = pgTable(
       .notNull()
       .references(() => feedItems.id),
     quantity: numeric('quantity', { precision: 12, scale: 1, mode: 'number' }).notNull(),
+    ...standardTimestamps(),
   },
   (t) => [index('feeding_event_items_event_idx').on(t.eventId), index('feeding_event_items_item_idx').on(t.itemId)],
 );
@@ -341,6 +369,7 @@ export const financialEntries = pgTable(
     dueDate: date('due_date', { mode: 'string' }),
     settledAt: date('settled_at', { mode: 'string' }), // liquidação (null = em aberto)
     origin: text('origin').notNull(),
+    ...standardTimestamps(),
   },
   (t) => [index('financial_entries_farm_date_idx').on(t.farmId, t.date)],
 );
@@ -358,7 +387,7 @@ export const assistantCaptures = pgTable(
     text: text('text'),
     // OCR/transcrição literal da mídia; não substitui a entrada original.
     extractedText: text('extracted_text'),
-    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
+    ...standardTimestamps(),
   },
   (t) => [
     index('assistant_captures_farm_idx').on(t.farmId),
@@ -382,7 +411,7 @@ export const assistantCaptureAttachments = pgTable(
     mimeType: text('mime_type').notNull(),
     byteSize: integer('byte_size').notNull(),
     durationMs: integer('duration_ms'),
-    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
+    ...standardTimestamps(),
   },
   (t) => [
     foreignKey({
@@ -409,6 +438,7 @@ export const assistantProposals = pgTable(
     status: text('status').notNull(), // "pendente" | "confirmada" | "descartada"
     dismissReason: text('dismiss_reason'),
     confirmedRecordIds: jsonb('confirmed_record_ids').$type<string[]>().notNull(),
+    ...standardTimestamps(),
   },
   (t) => [index('assistant_proposals_status_idx').on(t.status)],
 );
@@ -432,6 +462,7 @@ export const auditEvents = pgTable(
     after: text('after'),
     reason: text('reason'),
     origin: text('origin').notNull(),
+    ...standardTimestamps(),
   },
   (t) => [index('audit_events_farm_at_idx').on(t.farmId, t.at)],
 );
@@ -451,7 +482,7 @@ export const idempotencyKeys = pgTable(
     key: text('key').notNull(),
     payload: jsonb('payload').notNull(), // action (objeto; comparação via forma canônica)
     response: jsonb('response').notNull(), // resultado do comando
-    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
+    ...standardTimestamps(),
   },
   (t) => [primaryKey({ columns: [t.farmId, t.key] })],
 );
