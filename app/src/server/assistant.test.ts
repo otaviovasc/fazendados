@@ -465,6 +465,26 @@ test('corrige Medição individual concluída com motivo e auditoria', async () 
   assert.equal(tx.state.audits[0].entityType, 'medicao_individual');
 });
 
+test('registra Medição individual ausente em Controle já concluído', async () => {
+  const tx = createMemoryTx({
+    proposal: proposal('coleta', []),
+    animals: [{ id: 'animal2', farmId: 'farm1', name: 'Lurdinha', tag: null, status: 'ativo' }],
+    sessions: [{ id: 'session1', farmId: 'farm1', date: '2026-08-04', groupId: 'group1', shift: 'manha', status: 'concluido', origin: 'manual' }],
+  });
+
+  const result = await executeCommand(tx, auth, {
+    type: 'RecordIndividualMilkMeasurement',
+    sessionId: 'session1',
+    animalId: 'animal2',
+    liters: 13,
+  } satisfies CommandAction) as { measurement: { animalId: string; liters: number } };
+
+  assert.equal(result.measurement.animalId, 'animal2');
+  assert.equal(result.measurement.liters, 13);
+  assert.equal(tx.state.measurements.length, 1);
+  assert.equal(tx.state.sessions[0].status, 'concluido');
+});
+
 test('confirmação de controle leiteiro rejeita medição existente sem correção explícita', async () => {
   const tx = createMemoryTx({
     proposal: proposal('controle_leiteiro', [
@@ -538,6 +558,28 @@ test('confirma controle com Animal já lotado no Lote informado sem exigir decis
   assert.equal(result.facts, 2);
   assert.equal(tx.state.assignments.length, 1);
   assert.equal(result.recordIds.length, 2);
+});
+
+test('confirma medição nova em Controle assistido já concluído', async () => {
+  const tx = createMemoryTx({
+    proposal: milkControlProposal(),
+    groups: [milkControlGroup],
+    animals: [mimosa],
+    assignments: [{ id: 'as1', animalId: mimosa.id, groupId: milkControlGroup.id, start: '2026-01-01', end: null }],
+    sessions: [{ id: 'session1', farmId: 'farm1', date: '2026-08-04', groupId: 'group1', shift: 'manha', status: 'concluido', origin: 'manual' }],
+  });
+
+  const result = await executeCommand(tx, auth, {
+    type: 'ConfirmAssistantProposal',
+    proposalId: tx.state.proposal.id,
+    fields: tx.state.proposal.fields,
+    bindings: [{ animalId: mimosa.id, liters: 8 }],
+  } satisfies CommandAction) as { facts: number; recordIds: string[] };
+
+  assert.equal(result.facts, 1);
+  assert.equal(result.recordIds.length, 1);
+  assert.equal(tx.state.measurements.length, 1);
+  assert.equal(tx.state.sessions[0].status, 'concluido');
 });
 
 test('rejeita Controle com Lotação divergente sem decisão e não materializa fatos', async () => {

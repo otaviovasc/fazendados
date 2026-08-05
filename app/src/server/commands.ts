@@ -424,7 +424,8 @@ export async function executeCommand(tx: Tx, ctx: AuthContext, a: CommandAction)
         await tx.select().from(milkControlSessions).where(and(eq(milkControlSessions.id, a.sessionId), eq(milkControlSessions.farmId, farmId))).limit(1)
       )[0];
       if (!session) throw notFound('SESSION_NOT_FOUND', `Sessão de controle ${a.sessionId} não encontrada.`);
-      if (session.status !== 'em_andamento') throw conflict('SESSION_CLOSED', 'O controle leiteiro já está concluído.');
+      // Concluído impede duplicatas e edição silenciosa, mas não impede o
+      // preenchimento posterior de uma lacuna ainda sem Medição.
       const animal = await findAnimal(tx, farmId, a.animalId);
       if (!animal) throw notFound('ANIMAL_NOT_FOUND', `Animal ${a.animalId} não encontrado.`);
       const duplicate = await tx
@@ -1281,10 +1282,10 @@ async function materializeAssistantProposal(
         eq(milkControlSessions.shift, shift),
       ))
       .limit(1))[0];
-    if (existing?.status === 'concluido') {
-      throw conflict('SESSION_CLOSED', `O controle de ${group.name} já está concluído.`);
-    }
     const sessionId = existing?.id ?? uid('cs');
+    // Uma confirmação posterior pode preencher uma lacuna de um Controle já
+    // concluído; nesse caso preservamos o estado e auditamos apenas a Medição.
+    const shouldCompleteSession = !existing || existing.status !== 'concluido';
     if (!existing) {
       await tx.insert(milkControlSessions).values({
         id: sessionId,
@@ -1325,17 +1326,19 @@ async function materializeAssistantProposal(
         origin,
       });
     }
-    await tx.update(milkControlSessions).set({ status: 'concluido' }).where(eq(milkControlSessions.id, sessionId));
-    await audit(tx, ctx, {
-      action: 'registro',
-      entityType: 'controle_leiteiro',
-      entityId: sessionId,
-      description: 'Controle leiteiro concluído',
-      origin,
-    });
+    if (shouldCompleteSession) {
+      await tx.update(milkControlSessions).set({ status: 'concluido' }).where(eq(milkControlSessions.id, sessionId));
+      await audit(tx, ctx, {
+        action: 'registro',
+        entityType: 'controle_leiteiro',
+        entityId: sessionId,
+        description: 'Controle leiteiro concluído',
+        origin,
+      });
+    }
     return {
-      facts: rows.length + 1 + movedAssignmentIds.length,
-      recordIds: [sessionId, ...recordIds, ...movedAssignmentIds],
+      facts: rows.length + (existing ? 0 : 1) + movedAssignmentIds.length,
+      recordIds: [...(existing ? [] : [sessionId]), ...recordIds, ...movedAssignmentIds],
       summary: `${rows.length} ${rows.length === 1 ? 'medição registrada' : 'medições registradas'} — ${group.name}`,
     };
   }
