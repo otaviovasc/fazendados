@@ -37,6 +37,7 @@ import {
   NetworkError,
   apiLogin,
   apiLogout,
+  apiRegister,
   fetchBootstrap,
   sendCommand,
   setUnauthorizedHandler,
@@ -72,6 +73,11 @@ interface FarmContextValue {
   /** Último erro de domínio devolvido pelo servidor (toast auto-dismiss). */
   syncError: { code: string; message: string } | null;
   dismissSyncError: () => void;
+  /** Incorpora Captura/Propostas devolvidas pelo pipeline de mídia do Assistente. */
+  syncAssistantInterpretation: (result: {
+    capture: AssistantCapture;
+    proposals: AssistantProposal[];
+  }) => void;
 }
 
 const FarmContext = createContext<FarmContextValue | null>(null);
@@ -177,6 +183,22 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     void processQueue();
   }, [processQueue]);
 
+  const syncAssistantInterpretation = useCallback(
+    (result: { capture: AssistantCapture; proposals: AssistantProposal[] }) => {
+      setState((s) =>
+        s
+          ? applyCommandResult(
+              s,
+              { type: "CreateAssistantCapture", text: "", proposals: [] },
+              result,
+            )
+          : s,
+      );
+      scheduleRefresh();
+    },
+    [scheduleRefresh],
+  );
+
   // Retomada automática quando a conexão volta.
   useEffect(() => {
     window.addEventListener("online", retrySync);
@@ -194,22 +216,27 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     setStatus("loading");
     setBootError(null);
     try {
-      setState(await fetchBootstrap());
+      const nextState = await fetchBootstrap();
+      if (!nextState) {
+        resetSession();
+        return;
+      }
+      setState(nextState);
       setStatus("ready");
     } catch (e) {
       if (e instanceof ApiRequestError && e.status === 401) return; // handler já redirecionou
       setBootError(e instanceof NetworkError ? "Sem conexão com o servidor." : "Não foi possível carregar os dados.");
       setStatus("error");
     }
-  }, []);
+  }, [resetSession]);
 
   useEffect(() => {
     void boot();
   }, [boot]);
 
   const login = useCallback(
-    async (password: string) => {
-      await apiLogin(password);
+    async (username: string, password: string) => {
+      await apiLogin(username, password);
       await boot();
     },
     [boot],
@@ -219,6 +246,14 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     await apiLogout();
     resetSession();
   }, [resetSession]);
+
+  const register = useCallback(
+    async (input: { farmName: string; displayName: string; username: string; password: string }) => {
+      await apiRegister(input);
+      await boot();
+    },
+    [boot],
+  );
 
   const value = useMemo<FarmContextValue | null>(
     () =>
@@ -232,9 +267,10 @@ export function FarmProvider({ children }: { children: ReactNode }) {
             retrySync,
             syncError,
             dismissSyncError: () => setSyncError(null),
+            syncAssistantInterpretation,
           }
         : null,
-    [state, status, dispatch, logout, pendingCount, offline, retrySync, syncError],
+    [state, status, dispatch, logout, pendingCount, offline, retrySync, syncError, syncAssistantInterpretation],
   );
 
   if (status === "loading") {
@@ -266,7 +302,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   }
 
   if (status === "unauthorized" || !value) {
-    return <LoginPage onLogin={login} />;
+    return <LoginPage onLogin={login} onRegister={register} />;
   }
 
   return (

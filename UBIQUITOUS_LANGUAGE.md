@@ -62,7 +62,8 @@
 
 | Termo | Definição | Evitar |
 | --- | --- | --- |
-| **Captura** | Entrada original enviada ao Assistente por texto, áudio, foto ou documento. | Prompt, mensagem |
+| **Captura** | Entrada original enviada ao Assistente por texto, áudio, imagem ou documento; pode combinar texto e anexos. OCR/transcrição literal permanece separada da entrada original. | Prompt, mensagem |
+| **Anexo da Captura** | Metadados e referência privada, no storage, do áudio, imagem ou documento original de uma Captura; não contém bytes no PostgreSQL. | Arquivo no banco, fato confirmado |
 | **Proposta** | Interpretação estruturada e ainda não confirmada produzida a partir de uma Captura. | Registro, fato, ação da IA |
 | **Revisão** | Etapa humana de conferir e corrigir uma Proposta. | Aprovação automática |
 | **Confirmação** | Decisão humana que autoriza transformar uma Proposta em fatos do domínio. | Aceite da IA |
@@ -83,6 +84,8 @@
 - Uma **Produção diária**, um **Controle leiteiro** e uma **Coleta** podem
   coexistir na mesma data sem se substituir.
 - Uma **Captura** pode produzir uma ou mais **Propostas**.
+- Um **Anexo da Captura** pertence a uma única **Captura** e à mesma
+  **Fazenda** dela; seus bytes permanecem fora do PostgreSQL.
 - Uma **Proposta** só produz **Registros** por uma **Confirmação**.
 
 ## Exemplo de diálogo

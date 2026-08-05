@@ -3,6 +3,7 @@ import type { Db } from '../db/client.js';
 import {
   animalGroupAssignments,
   animals,
+  assistantCaptureAttachments,
   assistantCaptures,
   assistantProposals,
   auditEvents,
@@ -101,7 +102,7 @@ export async function loadFarmState(db: Db, farmId: string): Promise<FarmState> 
   const eventIds = feedingEventRows.map((e) => e.id);
   const captureIds = captureRows.map((c) => c.id);
 
-  const [assignmentRows, occupancyRows, measurementRows, feedingItemRows, proposalRows] = await Promise.all([
+  const [assignmentRows, occupancyRows, measurementRows, feedingItemRows, proposalRows, attachmentRows] = await Promise.all([
     animalIds.length
       ? db.select().from(animalGroupAssignments).where(inArray(animalGroupAssignments.animalId, animalIds)).orderBy(asc(animalGroupAssignments.id))
       : [],
@@ -117,6 +118,9 @@ export async function loadFarmState(db: Db, farmId: string): Promise<FarmState> 
     captureIds.length
       ? db.select().from(assistantProposals).where(inArray(assistantProposals.captureId, captureIds)).orderBy(asc(assistantProposals.id))
       : [],
+    captureIds.length
+      ? db.select().from(assistantCaptureAttachments).where(inArray(assistantCaptureAttachments.captureId, captureIds)).orderBy(asc(assistantCaptureAttachments.id))
+      : [],
   ]);
 
   const itemsByEvent = new Map<string, { itemId: string; quantity: number }[]>();
@@ -124,6 +128,12 @@ export async function loadFarmState(db: Db, farmId: string): Promise<FarmState> 
     const list = itemsByEvent.get(item.eventId) ?? [];
     list.push({ itemId: item.itemId, quantity: item.quantity });
     itemsByEvent.set(item.eventId, list);
+  }
+  const attachmentsByCapture = new Map<string, typeof attachmentRows>();
+  for (const attachment of attachmentRows) {
+    const list = attachmentsByCapture.get(attachment.captureId) ?? [];
+    list.push(attachment);
+    attachmentsByCapture.set(attachment.captureId, list);
   }
 
   return {
@@ -144,7 +154,7 @@ export async function loadFarmState(db: Db, farmId: string): Promise<FarmState> 
     feedEntries: byNaturalId(feedEntryRows).map(toFeedEntry),
     feedingEvents: feedingEventRows.map((e) => toFeedingEvent(e, itemsByEvent.get(e.id) ?? [])),
     financialEntries: financialRows.map(toFinancialEntry),
-    captures: captureRows.map(toCapture),
+    captures: captureRows.map((capture) => toCapture(capture, attachmentsByCapture.get(capture.id))),
     proposals: byNaturalId(proposalRows).map(toProposal),
     audit: auditRows.map(toAuditEvent),
   };

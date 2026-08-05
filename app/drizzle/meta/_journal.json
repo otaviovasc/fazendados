@@ -15,6 +15,13 @@
       "when": 1785866070445,
       "tag": "0001_postgis_real_map",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785866070446,
+      "tag": "0002_assistant_capture_attachments",
+      "breakpoints": true
     }
   ]
 }

@@ -2,14 +2,15 @@ import { serve } from '@hono/node-server';
 import { closeDb } from '../db/client.js';
 import { createApp } from './app.js';
 import { env } from './env.js';
+import { logger } from './logger.js';
 
 const config = env();
 const server = serve({ fetch: createApp().fetch, port: config.PORT, hostname: '0.0.0.0' }, (info) => {
-  console.log(`FazenDados API em http://0.0.0.0:${info.port}`);
+  logger.info('server.started', { port: info.port });
 });
 
 async function shutdown(signal: string) {
-  console.log(`${signal} recebido; encerrando.`);
+  logger.info('server.shutdown_requested', { signal });
   server.close(async () => {
     await closeDb();
     process.exit(0);

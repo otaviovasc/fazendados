@@ -37,6 +37,8 @@ import {
   CONFIDENCE_DOT,
   CONFIDENCE_LABEL,
   KIND_LABEL,
+  captureAttachmentUrl,
+  captureImageReferences,
   formatWhen,
 } from "./helpers";
 
@@ -478,9 +480,21 @@ export function ReviewSheet({
               <div className="flex gap-2">
                 <Quote size={16} className="text-ink-faint shrink-0 mt-0.5" />
                 <p className="text-sm text-ink-soft italic">
-                  {capture?.text ?? "Captura não encontrada."}
+                  {capture?.text ?? capture?.extractedText ?? "Foto capturada; leitura original indisponível."}
                 </p>
               </div>
+              {capture && captureImageReferences(capture).map((id) => (
+                <details key={id} className="mt-3">
+                  <summary className="cursor-pointer text-xs font-medium text-pasture-700">
+                    Ver foto original
+                  </summary>
+                  <img
+                    src={captureAttachmentUrl(capture.id, id)}
+                    alt="Foto original da Captura"
+                    className="mt-2 max-h-80 w-full rounded-xl border border-black/10 object-contain bg-ink/[0.02]"
+                  />
+                </details>
+              ))}
             </div>
           </section>
 

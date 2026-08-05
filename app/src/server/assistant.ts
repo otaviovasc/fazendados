@@ -353,9 +353,12 @@ function buildSystemPrompt(context: AssistantContext): string {
   return `${CONSTITUTION}\n\nHoje é ${dateKeyInSaoPaulo()} no fuso de São Paulo.${groups}${animals}${feedItems}\n\n${ACTIONS}\n\n${OUTPUT_CONTRACT}`;
 }
 
+type ChatContent = string | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }>;
+type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: ChatContent };
+
 async function chat(
-  config: { apiKey: string; baseUrl: string; model: string; appUrl: string; timeoutMs: number },
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+  config: { apiKey: string; baseUrl: string; model: string; appUrl: string; timeoutMs: number; jsonOutput?: boolean },
+  messages: ChatMessage[],
 ): Promise<unknown> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.timeoutMs);
@@ -376,7 +379,7 @@ async function chat(
         temperature: 0,
         max_completion_tokens: 16_000,
         reasoning: { effort: 'minimal', exclude: true },
-        response_format: { type: 'json_object' },
+        ...(config.jsonOutput === false ? {} : { response_format: { type: 'json_object' } }),
       }),
     });
   } catch {
@@ -405,7 +408,7 @@ export async function interpretAssistantCapture(text: string, context: Assistant
     appUrl: configuration.PUBLIC_APP_URL,
     timeoutMs: configuration.OPENROUTER_TIMEOUT_MS,
   };
-  const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+  const messages: ChatMessage[] = [
     { role: 'system', content: buildSystemPrompt(context) },
     { role: 'user', content: text },
   ];
@@ -424,4 +427,27 @@ export async function interpretAssistantCapture(text: string, context: Assistant
   }
 
   return parsed.data.intents.map((intent) => toProposal(intent, context));
+}
+
+/** Leitura literal de imagem. Não produz intents nem inferências de domínio. */
+export async function readImageCapture(image: { mimeType: 'image/jpeg' | 'image/png' | 'image/webp'; bytes: Uint8Array }): Promise<string> {
+  const configuration = env();
+  if (!configuration.OPENROUTER_API_KEY) {
+    throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Leitura de foto não configurada neste ambiente.');
+  }
+  const dataUrl = `data:${image.mimeType};base64,${Buffer.from(image.bytes).toString('base64')}`;
+  const raw = await chat({
+    apiKey: configuration.OPENROUTER_API_KEY,
+    baseUrl: configuration.OPENROUTER_BASE_URL,
+    model: configuration.OPENROUTER_VISION_MODEL,
+    appUrl: configuration.PUBLIC_APP_URL,
+    timeoutMs: configuration.OPENROUTER_TIMEOUT_MS,
+    jsonOutput: false,
+  }, [
+    { role: 'system', content: 'Você faz OCR de uma foto de caderno rural. Transcreva literalmente apenas o texto e números visíveis, mantendo linhas e rótulos. Não interprete, não some valores, não corrija, não complete lacunas e não faça recomendações. Se algo estiver ilegível, escreva [ilegível]. Responda somente a transcrição.' },
+    { role: 'user', content: [{ type: 'text', text: 'Transcreva esta imagem.' }, { type: 'image_url', image_url: { url: dataUrl } }] },
+  ]);
+  const transcription = messageContent(raw).trim();
+  if (!transcription) throw new ApiError(502, 'LLM_INVALID_OUTPUT', 'Não foi possível ler texto na foto. Tente outra imagem ou digite a Captura.');
+  return transcription.slice(0, 20_000);
 }

@@ -15,7 +15,7 @@ semanticamente alinhados.
 | Análise leiteira | Comparar fatos confirmados sem extrapolar lacunas | Desempenho leiteiro, Cobertura, Tendência |
 | Alimentação | Registrar entradas e consumo | Alimento, Entrada, Trato, Item do trato, Saldo |
 | Financeiro | Registrar caixa previsto e realizado | Receita, Despesa, Liquidação |
-| Assistente | Converter entrada humana em proposta revisável | Captura, Proposta, Revisão, Confirmação |
+| Assistente | Converter entrada humana em proposta revisável | Captura, Anexo da Captura, Proposta, Revisão, Confirmação |
 
 ## Mapa conceitual
 
@@ -46,7 +46,8 @@ flowchart LR
 
   F --> LF[Lançamentos financeiros]
 
-  CAP[Captura] --> PROP[Proposta]
+  CAP[Captura] --> ATT[Anexos de mídia no storage]
+  CAP --> PROP[Proposta]
   PROP --> REV[Revisão]
   REV --> CONF[Confirmação]
   CONF -->|executa comando| REG[Registro de domínio]
@@ -86,8 +87,11 @@ flowchart LR
 11. O Saldo de alimento é derivado e não editável diretamente.
 12. Uma Confirmação é idempotente: repetir a mesma solicitação não cria fatos
     duplicados.
-13. A Captura original e a Proposta interpretada permanecem consultáveis para
-    auditoria, respeitando retenção e privacidade.
+13. A Captura original, o texto extraído literalmente de mídia, seus metadados
+    de Anexo e a Proposta interpretada permanecem consultáveis para auditoria,
+    respeitando retenção e privacidade; extração (OCR/transcrição) não é
+    interpretação e bytes de áudio, imagem e documento ficam no storage, nunca
+    no PostgreSQL.
 14. Resultado de caixa considera apenas lançamentos liquidados e não recebe o
     nome de lucro.
 15. Uma comparação entre Animais sempre informa período, quantidade de dias
@@ -115,7 +119,8 @@ flowchart LR
   duplicar fatos
 - `feed_items`, `feed_entries`, `feeding_events`, `feeding_event_items`
 - `financial_entries`
-- `assistant_captures`, `assistant_proposals`, `assistant_confirmations`
+- `assistant_captures`, `assistant_capture_attachments`,
+  `assistant_proposals`, `assistant_confirmations`
 - `audit_events`
 
 Tabelas operacionais carregam `farm_id` mesmo quando ele poderia ser alcançado

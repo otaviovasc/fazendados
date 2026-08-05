@@ -201,6 +201,9 @@ Perímetro/Pastos e `geometry(Point,4326)` para Instalações; GeoJSON fica apen
 no transporte. O backend já está implementado em `fazendados/app` (23 tabelas, API
 `/api/bootstrap` + `/api/commands` com idempotência e auditoria transacional).
 
+> A parte de autenticação desta decisão foi substituída por D-035; as demais
+> escolhas de stack continuam vigentes.
+
 ### D-032 — Descontinuados no V1
 
 Além do já decidido em D-002, ficam definitivamente fora do V1: Peso, Cio,
@@ -217,6 +220,25 @@ reparo quando o formato vier inválido. A conversão para Propostas é
 determinística, pode gerar várias Propostas para uma Captura e nunca envia IDs
 internos ao modelo. LLM, Captura, Proposta, Revisão e Confirmação permanecem
 separados; a Confirmação continua sendo a única etapa que cria fatos.
+
+### D-034 — Anexos multimodais da Captura são metadados privados
+
+Uma Captura pode conter texto, áudio, imagem ou documento, inclusive combinar
+texto com vários Anexos. O PostgreSQL armazena apenas metadados mínimos e uma
+`storage_key` privada por Anexo; bytes não são persistidos no banco. Texto
+extraído por OCR ou transcrição é literal e fica separado do texto original da
+Captura: extração não é interpretação. Cada Anexo carrega `farm_id` e referencia
+a Captura por uma FK composta para impedir associação entre Fazendas.
+Interpretar mídia pode gerar Propostas, mas não muda o contrato Captura →
+Proposta → Revisão → Confirmação nem cria fatos antes da Confirmação humana.
+
+### D-035 — Contas por Usuário com escopo de Fazenda
+
+Cada conta possui `username` normalizado e único e um `password_hash` gerado
+com scrypt; senha em texto puro não é persistida. Uma conta continua pertencendo
+a exatamente uma Fazenda no V1, portanto a sessão resolve um único `farm_id`.
+Contas legadas sem hash não são autenticáveis até uma redefinição explícita de
+senha; a migration não inventa nem reprocessa a antiga `APP_PASSWORD`.
 
 ## Pendentes
 

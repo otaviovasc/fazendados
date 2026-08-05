@@ -1,3 +1,4 @@
+import { randomBytes, scryptSync } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { closeDb, getDb } from './client.js';
 import { polygonGeometryFromLatLng } from './spatial.js';
@@ -43,6 +44,13 @@ const rand = mulberry32(20260804);
 const pick = <T,>(arr: T[]): T => arr[Math.floor(rand() * arr.length)];
 const between = (min: number, max: number) => min + rand() * (max - min);
 const round1 = (v: number) => Math.round(v * 10) / 10;
+
+/** Formato compartilhado com a autenticação: scrypt$N$r$p$salt$hash. */
+function hashSeedPassword(password: string) {
+  const salt = randomBytes(16);
+  const digest = scryptSync(password, salt, 64, { N: 16_384, r: 8, p: 1 });
+  return `scrypt$16384$8$1$${salt.toString('base64url')}$${digest.toString('base64url')}`;
+}
 
 // Dados cartográficos adaptados do sitio-cafezinho. O seed não inclui
 // Instalações nem ocupações: semeá-las exigiria afirmar informações que não
@@ -95,6 +103,7 @@ async function wipeFarm(db: DbExecutor) {
   await db.execute(sql`delete from "sessions" where "user_id" in (select "id" from "users" where "farm_id" = ${FARM_ID})`);
   await db.execute(sql`delete from "audit_events" where "farm_id" = ${FARM_ID}`);
   await db.execute(sql`delete from "assistant_proposals" where "capture_id" in (select "id" from "assistant_captures" where "farm_id" = ${FARM_ID})`);
+  await db.execute(sql`delete from "assistant_capture_attachments" where "farm_id" = ${FARM_ID}`);
   await db.execute(sql`delete from "assistant_captures" where "farm_id" = ${FARM_ID}`);
   await db.execute(sql`delete from "financial_entries" where "farm_id" = ${FARM_ID}`);
   await db.execute(sql`delete from "feeding_event_items" where "event_id" in (select "id" from "feeding_events" where "farm_id" = ${FARM_ID})`);
@@ -127,7 +136,13 @@ async function seed() {
   const days = lastNDays(30);
 
   await db.insert(farms).values({ id: FARM_ID, name: 'Sítio Cafezinho' });
-  await db.insert(users).values({ id: 'u1', farmId: FARM_ID, name: 'Otávio' });
+  await db.insert(users).values({
+    id: 'u1',
+    farmId: FARM_ID,
+    name: 'Otávio',
+    username: 'otavio',
+    passwordHash: hashSeedPassword(process.env.SEED_PASSWORD ?? 'fazendados'),
+  });
 
   // Rebanho
   const animalRows = SEEDED_ANIMALS.map((animal) => ({ ...animal, farmId: FARM_ID }));

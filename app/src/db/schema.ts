@@ -1,6 +1,7 @@
 import {
   date,
   customType,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -49,8 +50,15 @@ export const users = pgTable(
       .notNull()
       .references(() => farms.id),
     name: text('name').notNull(),
+    /** Identificador público normalizado, único entre as contas. */
+    username: text('username').notNull(),
+    /** Null somente para conta legada, que deve passar por redefinição de senha. */
+    passwordHash: text('password_hash'),
   },
-  (t) => [uniqueIndex('users_farm_id_unique').on(t.farmId)],
+  (t) => [
+    uniqueIndex('users_farm_id_unique').on(t.farmId),
+    uniqueIndex('users_username_unique').on(t.username),
+  ],
 );
 
 /** Sessões de autenticação (cookie httpOnly → token). */
@@ -346,10 +354,44 @@ export const assistantCaptures = pgTable(
     farmId: text('farm_id')
       .notNull()
       .references(() => farms.id),
-    text: text('text').notNull(),
+    // Uma Captura pode ser somente mídia; a borda exige texto ou anexo.
+    text: text('text'),
+    // OCR/transcrição literal da mídia; não substitui a entrada original.
+    extractedText: text('extracted_text'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
   },
-  (t) => [index('assistant_captures_farm_idx').on(t.farmId)],
+  (t) => [
+    index('assistant_captures_farm_idx').on(t.farmId),
+    // Permite ao filho verificar a Fazenda junto com a Captura.
+    uniqueIndex('assistant_captures_farm_id_id_unique').on(t.farmId, t.id),
+  ],
+);
+
+/**
+ * Referência privada ao objeto de mídia da Captura. O binário vive no storage,
+ * nunca no PostgreSQL; `farm_id` é repetido para escopo e defesa cross-Fazenda.
+ */
+export const assistantCaptureAttachments = pgTable(
+  'assistant_capture_attachments',
+  {
+    id: text('id').primaryKey(),
+    farmId: text('farm_id').notNull(),
+    captureId: text('capture_id').notNull(),
+    kind: text('kind').notNull(), // "audio" | "imagem" | "documento"
+    storageKey: text('storage_key').notNull(),
+    mimeType: text('mime_type').notNull(),
+    byteSize: integer('byte_size').notNull(),
+    durationMs: integer('duration_ms'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.farmId, t.captureId],
+      foreignColumns: [assistantCaptures.farmId, assistantCaptures.id],
+      name: 'assistant_capture_attachments_farm_capture_fk',
+    }),
+    index('assistant_capture_attachments_farm_capture_idx').on(t.farmId, t.captureId),
+  ],
 );
 
 export const assistantProposals = pgTable(

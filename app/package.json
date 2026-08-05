@@ -28,7 +28,9 @@
     "db:reset": "docker compose down -v && pnpm db:setup",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs src/db/migrate.ts",
-    "db:seed": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs src/db/seed.ts"
+    "db:seed": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs src/db/seed.ts",
+    "db:seed:cafezinho": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs src/db/seed-cafezinho-real.ts",
+    "db:seed:cafezinho:deployed": "node --env-file-if-exists=.env dist/db/seed-cafezinho-real.js"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.5",

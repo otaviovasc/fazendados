@@ -1,8 +1,7 @@
 // Cliente HTTP da API do FazenDados. Todas as mutações passam por
 // POST /api/commands com idempotencyKey; a sessão viaja em cookie httpOnly.
-import type { FarmState } from "../domain/types";
+import type { AssistantCapture, AssistantProposal, FarmState } from "../domain/types";
 import type { Action } from "./actions";
-import type { ProposalInput } from "./actions";
 
 /** Erro tipado devolvido pela API (4xx/5xx com corpo { error: { code, message } }). */
 export class ApiRequestError extends Error {
@@ -37,9 +36,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   let res: Response;
   try {
+    const headers = new Headers(init?.headers);
+    if (!(init?.body instanceof FormData) && !headers.has("content-type")) {
+      headers.set("content-type", "application/json");
+    }
     res = await fetch(path, {
       credentials: "same-origin",
-      headers: { "content-type": "application/json" },
+      headers,
       signal: controller.signal,
       ...init,
     });
@@ -64,9 +67,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-export async function fetchBootstrap(): Promise<FarmState> {
-  const body = await request<{ state: FarmState }>("/api/bootstrap");
-  return body.state;
+export async function fetchBootstrap(): Promise<FarmState | null> {
+  const body = await request<{ authenticated: false } | { authenticated: true; state: FarmState }>("/api/bootstrap");
+  return body.authenticated ? body.state : null;
 }
 
 /**
@@ -81,18 +84,72 @@ export async function sendCommand(idempotencyKey: string, action: Action): Promi
   return body.result;
 }
 
-export async function interpretAssistantCapture(text: string): Promise<ProposalInput[]> {
-  const body = await request<{ proposals: ProposalInput[] }>("/api/assistant/interpret", {
+/** Persiste a Captura textual antes de pedir a interpretação. */
+export async function createAssistantTextCapture(text: string): Promise<AssistantCapture> {
+  const body = await request<{ capture: AssistantCapture }>("/api/assistant/captures", {
     method: "POST",
     body: JSON.stringify({ text }),
   });
-  return body.proposals;
+  return body.capture;
 }
 
-export async function apiLogin(password: string): Promise<void> {
+export type AssistantInterpretation = {
+  capture: AssistantCapture;
+  proposals: AssistantProposal[];
+};
+
+/**
+ * Persiste uma foto da Captura antes da interpretação. O arquivo viaja em
+ * multipart para não precisar virar base64 na memória do navegador.
+ */
+export async function uploadAssistantPhoto(
+  photo: File,
+  text?: string,
+): Promise<AssistantCapture> {
+  const form = new FormData();
+  form.set("photo", photo);
+  if (text?.trim()) form.set("text", text.trim());
+  const body = await request<{ capture: AssistantCapture }>("/api/assistant/captures/photo", {
+    method: "POST",
+    body: form,
+  });
+  return body.capture;
+}
+
+/** Interpreta uma Captura já persistida, mantendo a mídia privada no servidor. */
+export async function interpretPersistedAssistantCapture(
+  captureId: string,
+): Promise<AssistantInterpretation> {
+  return request<AssistantInterpretation>(`/api/assistant/captures/${captureId}/interpret`, {
+    method: "POST",
+  });
+}
+
+/** Lê o texto literal da foto antes da interpretação; OCR não confirma fatos. */
+export async function readAssistantPhoto(captureId: string): Promise<AssistantCapture> {
+  const body = await request<{ capture: AssistantCapture }>(
+    `/api/assistant/captures/${captureId}/read`,
+    { method: "POST" },
+  );
+  return body.capture;
+}
+
+export async function apiLogin(username: string, password: string): Promise<void> {
   await request<{ ok: true }>("/api/login", {
     method: "POST",
-    body: JSON.stringify({ password }),
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export async function apiRegister(input: {
+  farmName: string;
+  displayName: string;
+  username: string;
+  password: string;
+}): Promise<void> {
+  await request<{ ok: true }>("/api/register", {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 }
 

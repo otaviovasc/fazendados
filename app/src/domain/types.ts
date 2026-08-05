@@ -13,6 +13,7 @@ export interface Farm {
 export interface User {
   id: string;
   name: string;
+  username: string;
   farmId: string;
 }
 
@@ -168,10 +169,31 @@ export interface FinancialEntry {
 // ---------- Assistente ----------
 export type FactOrigin = "manual" | "assistente";
 
+/** Tipo do original anexado a uma Captura; bytes vivem no storage privado. */
+export type AssistantCaptureAttachmentKind = "audio" | "imagem" | "documento";
+
+/** Metadados e referência privada do arquivo original, sem conteúdo binário. */
+export interface AssistantCaptureAttachment {
+  id: string;
+  farmId: string;
+  captureId: string;
+  kind: AssistantCaptureAttachmentKind;
+  storageKey: string;
+  mimeType: string;
+  byteSize: number;
+  durationMs?: number;
+  createdAt: ISODateTime;
+}
+
 export interface AssistantCapture {
   id: string;
   farmId: string;
-  text: string;
+  /** Texto original da pessoa; null quando a Captura começa somente em mídia. */
+  text: string | null;
+  /** OCR/transcrição literal extraída da mídia, ainda separada da Proposta. */
+  extractedText: string | null;
+  /** Anexos originais, carregados quando a consulta precisar mostrar a origem. */
+  attachments?: AssistantCaptureAttachment[];
   createdAt: ISODateTime;
 }
 

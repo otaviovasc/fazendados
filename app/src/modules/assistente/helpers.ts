@@ -1,4 +1,5 @@
 import { formatRelativeDay } from "../../lib/dates";
+import type { AssistantCapture } from "../../domain/types";
 
 /** "hoje · 07:12" a partir de um ISODateTime da Captura. */
 export function formatWhen(isoDateTime: string): string {
@@ -27,3 +28,15 @@ export const CONFIDENCE_LABEL: Record<string, string> = {
   media: "confiança média",
   baixa: "confiança baixa",
 };
+
+/** Referências privadas de imagem — a UI nunca recebe nem expõe storageKey/URL. */
+export function captureImageReferences(capture: AssistantCapture): string[] {
+  return capture.attachments
+    ?.filter((attachment) => attachment.kind === "imagem")
+    .map((attachment) => attachment.id) ?? [];
+}
+
+/** URL autenticada da mídia original; storage nunca é exposto ao navegador. */
+export function captureAttachmentUrl(captureId: string, attachmentId: string): string {
+  return `/api/assistant/captures/${encodeURIComponent(captureId)}/attachments/${encodeURIComponent(attachmentId)}`;
+}

@@ -1,7 +1,7 @@
 # Modelo de dados proposto
 
 > **Superado.** Este documento foi uma proposta de discussão anterior às decisões
-> registradas em `DECISIONS.md` (D-017 a D-032). O modelo vigente está em
+> registradas em `DECISIONS.md` (D-017 a D-035). O modelo vigente está em
 > `ONTOLOGY.md` e no schema real em `app/src/db/schema.ts`. Mantido apenas como
 > histórico.
 
@@ -359,22 +359,19 @@ Se pagamentos parciais forem indispensáveis, substituir `settled_at` por
 
 ## Assistente e arquivos
 
-### `stored_files`
-
-`id`, `farm_id` e metadados/estado de upload: nome original, MIME, tamanho,
-hash, provider, object key, status e timestamps. Binário nunca fica no
-PostgreSQL.
-
 ### `assistant_captures`
 
-`id`, `farm_id`, `created_by_user_id`, `input_kind`, `status`, texto/transcrição
-bruta quando permitido, modelo, versão, tokens, custo, latência, `error_code`,
-timestamps e arquivos associados.
+`id`, `farm_id`, texto original opcional, `extracted_text` opcional e
+`created_at`. `extracted_text` preserva OCR/transcrição literal separado da
+entrada original e não é uma Proposta. A Captura pode começar apenas por mídia,
+desde que a borda valide texto ou Anexo.
 
-### `assistant_capture_files`
+### `assistant_capture_attachments`
 
-`capture_id`, `stored_file_id`, `ordinal` e `role`. Preserva a ordem de várias
-fotos/documentos sem colocar várias FKs opcionais na Captura.
+`id`, `farm_id`, `capture_id`, tipo (`audio`, `imagem` ou `documento`),
+`storage_key`, MIME, tamanho, duração opcional e timestamp. A FK composta
+`(farm_id, capture_id)` aponta para a Captura na mesma Fazenda. São somente
+metadados e referência privada; binários jamais ficam no PostgreSQL.
 
 ### `assistant_proposals`
 

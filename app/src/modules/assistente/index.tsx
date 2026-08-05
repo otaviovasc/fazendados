@@ -1,16 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
+  Camera,
   CheckCircle2,
+  ImagePlus,
   Hash,
   Inbox,
+  LoaderCircle,
   Send,
   Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
 import type { AssistantProposal } from "../../domain/types";
 import { captureOf, pendingProposals, useFarm } from "../../state/store";
-import { interpretAssistantCapture } from "../../state/api";
+import {
+  createAssistantTextCapture,
+  interpretPersistedAssistantCapture,
+  readAssistantPhoto,
+  uploadAssistantPhoto,
+} from "../../state/api";
 import {
   Button,
   Card,
@@ -22,19 +31,26 @@ import {
   SectionTitle,
 } from "../../components/ui";
 import { ReviewSheet } from "./ReviewSheet";
-import { KIND_LABEL, formatWhen } from "./helpers";
+import { captureAttachmentUrl, captureImageReferences, KIND_LABEL, formatWhen } from "./helpers";
 
 interface Toast {
   message: string;
 }
 
 export default function AssistentePage() {
-  const { state, dispatch } = useFarm();
+  const { state, syncAssistantInterpretation } = useFarm();
   const [text, setText] = useState("");
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoCaptureId, setPhotoCaptureId] = useState<string | null>(null);
+  const [photoStage, setPhotoStage] = useState<"idle" | "uploading" | "reading" | "interpreting">("idle");
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const [reviewId, setReviewId] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [interpreting, setInterpreting] = useState(false);
   const [interpretError, setInterpretError] = useState<string | null>(null);
+  const cameraInput = useRef<HTMLInputElement>(null);
+  const galleryInput = useRef<HTMLInputElement>(null);
 
   const pending = pendingProposals(state);
   const history = state.proposals.filter((p) => p.status !== "pendente");
@@ -45,12 +61,9 @@ export default function AssistentePage() {
     setInterpreting(true);
     setInterpretError(null);
     try {
-      const proposals = await interpretAssistantCapture(t);
-      const outcome = await dispatch({ type: "CreateAssistantCapture", text: t, proposals });
-      if (!outcome.ok) {
-        setInterpretError(outcome.message);
-        return;
-      }
+      const capture = await createAssistantTextCapture(t);
+      const result = await interpretPersistedAssistantCapture(capture.id);
+      syncAssistantInterpretation(result);
       setText("");
     } catch (error) {
       setInterpretError(error instanceof Error ? error.message : "Não foi possível gerar a Proposta.");
@@ -58,6 +71,67 @@ export default function AssistentePage() {
       setInterpreting(false);
     }
   };
+
+  const clearPhoto = () => {
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhoto(null);
+    setPhotoPreview(null);
+    setPhotoCaptureId(null);
+    setPhotoError(null);
+    setPhotoStage("idle");
+  };
+
+  const choosePhoto = (file: File | undefined) => {
+    if (!file) return;
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
+      setPhotoError("Escolha uma foto JPEG, PNG ou WEBP.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setPhotoError("A foto precisa ter no máximo 10 MB.");
+      return;
+    }
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhoto(file);
+    setPhotoPreview(URL.createObjectURL(file));
+    setPhotoCaptureId(null);
+    setPhotoError(null);
+    setPhotoStage("idle");
+  };
+
+  const submitPhoto = async () => {
+    if (!photo || photoStage !== "idle") return;
+    setPhotoError(null);
+    try {
+      let captureId = photoCaptureId;
+      let needsRead = true;
+      if (!captureId) {
+        setPhotoStage("uploading");
+        const capture = await uploadAssistantPhoto(photo, text);
+        captureId = capture.id;
+        needsRead = capture.extractedText === null;
+        setPhotoCaptureId(captureId);
+      }
+      // OCR é uma etapa explícita da foto, mesmo com uma observação digitada.
+      // Em erro, a mesma foto/captura fica disponível para retry sem upload.
+      if (needsRead) {
+        setPhotoStage("reading");
+        await readAssistantPhoto(captureId);
+      }
+      setPhotoStage("interpreting");
+      const result = await interpretPersistedAssistantCapture(captureId);
+      syncAssistantInterpretation(result);
+      setText("");
+      clearPhoto();
+    } catch (error) {
+      setPhotoError(error instanceof Error ? error.message : "Não foi possível ler a foto.");
+      setPhotoStage("idle");
+    }
+  };
+
+  useEffect(() => () => {
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+  }, [photoPreview]);
 
   // Fila: após a Confirmação, avança para a próxima Proposta pendente.
   const handleConfirmed = (confirmed: AssistantProposal, summary: string) => {
@@ -105,15 +179,86 @@ export default function AssistentePage() {
           onChange={(e) => setText(e.target.value)}
           aria-label="Texto da captura"
         />
+        <input
+          ref={cameraInput}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          capture="environment"
+          className="sr-only"
+          aria-label="Tirar foto da anotação ou comprovante"
+          onChange={(e) => {
+            choosePhoto(e.target.files?.[0]);
+            e.currentTarget.value = "";
+          }}
+        />
+        <input
+          ref={galleryInput}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="sr-only"
+          aria-label="Escolher foto da galeria"
+          onChange={(e) => {
+            choosePhoto(e.target.files?.[0]);
+            e.currentTarget.value = "";
+          }}
+        />
+        {photoPreview ? (
+          <div className="mt-3 rounded-2xl border border-black/10 bg-ink/[0.02] p-3">
+            <div className="flex gap-3 items-start">
+              <img
+                src={photoPreview}
+                alt="Prévia da foto selecionada"
+                className="size-20 rounded-xl object-cover border border-black/10"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium truncate">{photo?.name}</p>
+                <p className="text-xs text-ink-faint mt-0.5">
+                  {photo ? `${Math.ceil(photo.size / 1024)} KB` : "Foto pronta para envio"}
+                </p>
+                <p className="text-xs text-ink-soft mt-2">
+                  A imagem será lida primeiro; a Proposta continua exigindo sua revisão.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={clearPhoto}
+                disabled={photoStage !== "idle"}
+                aria-label="Remover foto selecionada"
+                className="min-h-[44px] min-w-[44px] grid place-items-center rounded-xl text-ink-soft hover:bg-ink/5 disabled:opacity-50"
+              >
+                <Trash2 size={17} />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2 mt-3">
+            <Button variant="secondary" type="button" onClick={() => cameraInput.current?.click()}>
+              <Camera size={16} /> Tirar foto
+            </Button>
+            <Button variant="secondary" type="button" onClick={() => galleryInput.current?.click()}>
+              <ImagePlus size={16} /> Galeria
+            </Button>
+          </div>
+        )}
         <p className="text-xs text-ink-faint mt-2">
-          A Captura por texto está disponível. Áudio e foto aparecerão quando
-          transcrição e leitura de imagem estiverem conectadas ao mesmo pipeline.
+          Foto de anotação ou comprovante: JPEG, PNG ou WEBP, até 10 MB.
         </p>
         {interpretError && <div className="mt-3"><InlineError>{interpretError}</InlineError></div>}
+        {photoError && <div className="mt-3"><InlineError>{photoError}</InlineError></div>}
         <div className="flex items-center gap-2 mt-3">
+          {photo && (
+            <Button
+              variant="secondary"
+              disabled={photoStage !== "idle"}
+              onClick={() => void submitPhoto()}
+            >
+              {photoStage !== "idle" && <LoaderCircle size={15} className="animate-spin" />}
+              {photoStage === "uploading" ? "Enviando foto…" : photoStage === "reading" ? "Lendo foto…" : photoStage === "interpreting" ? "Interpretando…" : photoCaptureId ? "Tentar novamente" : "Ler foto"}
+            </Button>
+          )}
           <Button
             className="ml-auto"
-            disabled={!text.trim() || interpreting}
+            disabled={!text.trim() || interpreting || photoStage !== "idle" || Boolean(photo)}
             onClick={submit}
           >
             <Send size={15} /> {interpreting ? "Interpretando…" : "Gerar proposta"}
@@ -137,6 +282,7 @@ export default function AssistentePage() {
             <div className="space-y-3">
               {pending.map((p) => {
                 const cap = captureOf(state, p.captureId);
+                const photos = cap ? captureImageReferences(cap) : [];
                 return (
                   <Card key={p.id} className="p-4">
                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -151,9 +297,10 @@ export default function AssistentePage() {
                     </div>
                     <p className="font-medium">{p.title}</p>
                     {cap && (
-                      <p className="text-sm text-ink-soft italic mt-1 line-clamp-2">
-                        “{cap.text}”
-                      </p>
+                      <>
+                        {(cap.text ?? cap.extractedText) && <p className="text-sm text-ink-soft italic mt-1 line-clamp-2">“{cap.text ?? cap.extractedText}”</p>}
+                        {photos.map((id) => <a key={id} href={captureAttachmentUrl(cap.id, id)} target="_blank" rel="noreferrer" className="inline-block text-xs text-pasture-700 underline underline-offset-2 mt-1">Abrir foto original</a>)}
+                      </>
                     )}
                     <div className="flex items-center justify-between mt-3">
                       {cap && (
@@ -191,6 +338,8 @@ export default function AssistentePage() {
             <div className="space-y-3">
               {history.map((p) => {
                 const confirmed = p.status === "confirmada";
+                const cap = captureOf(state, p.captureId);
+                const photos = cap ? captureImageReferences(cap) : [];
                 return (
                   <Card
                     key={p.id}
@@ -211,6 +360,7 @@ export default function AssistentePage() {
                     >
                       {p.title}
                     </p>
+                    {cap && photos.map((id) => <a key={id} href={captureAttachmentUrl(cap.id, id)} target="_blank" rel="noreferrer" className="inline-block text-xs text-pasture-700 underline underline-offset-2 mt-1">Abrir foto original</a>)}
                     {confirmed && p.confirmedRecordIds.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-2">
                         {p.confirmedRecordIds.map((id) => (

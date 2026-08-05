@@ -3,6 +3,7 @@ import type {
   AnimalGroupAssignment,
   AnimalStatus,
   AssistantCapture,
+  AssistantCaptureAttachment,
   AssistantProposal,
   AuditEvent,
   DailyMilkProduction,
@@ -30,6 +31,7 @@ import type {
   animalGroupAssignments,
   animals,
   assistantCaptures,
+  assistantCaptureAttachments,
   assistantProposals,
   auditEvents,
   dailyMilkProductions,
@@ -57,7 +59,12 @@ type Row<T> = T extends { $inferSelect: infer R } ? R : never;
 
 export const toFarm = (r: Row<typeof farms>): Farm => ({ id: r.id, name: r.name });
 
-export const toUser = (r: Row<typeof users>): User => ({ id: r.id, name: r.name, farmId: r.farmId });
+export const toUser = (r: Row<typeof users>): User => ({
+  id: r.id,
+  name: r.name,
+  username: r.username,
+  farmId: r.farmId,
+});
 
 export const toFarmBoundary = (r: Row<typeof farmBoundaries>): FarmBoundary => ({
   id: r.id,
@@ -189,10 +196,27 @@ export const toFinancialEntry = (r: Row<typeof financialEntries>): FinancialEntr
   origin: r.origin as FactOrigin,
 });
 
-export const toCapture = (r: Row<typeof assistantCaptures>): AssistantCapture => ({
+export const toCaptureAttachment = (r: Row<typeof assistantCaptureAttachments>): AssistantCaptureAttachment => ({
+  id: r.id,
+  farmId: r.farmId,
+  captureId: r.captureId,
+  kind: r.kind as AssistantCaptureAttachment['kind'],
+  storageKey: r.storageKey,
+  mimeType: r.mimeType,
+  byteSize: r.byteSize,
+  durationMs: r.durationMs ?? undefined,
+  createdAt: r.createdAt.toISOString(),
+});
+
+export const toCapture = (
+  r: Row<typeof assistantCaptures>,
+  attachments?: Row<typeof assistantCaptureAttachments>[],
+): AssistantCapture => ({
   id: r.id,
   farmId: r.farmId,
   text: r.text,
+  extractedText: r.extractedText,
+  attachments: attachments?.map(toCaptureAttachment),
   createdAt: r.createdAt.toISOString(),
 });
 
