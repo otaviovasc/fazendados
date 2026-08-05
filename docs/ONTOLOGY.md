@@ -76,9 +76,9 @@ flowchart LR
    por Animal.
 6. O Turno única é obrigatório para Lotes com `milkingsPerDay = 1`; Lotes com
    `milkingsPerDay = 2` usam manhã e tarde.
-7. Uma Medição individual é um valor em litros com 1 casa decimal, referente a
-   uma única Ordenha, e pertence a um Controle leiteiro e a um Animal da mesma
-   Fazenda.
+7. Uma Medição individual é um valor em litros com 1 casa decimal, entre 0 e
+   100 L, referente a uma única Ordenha, e pertence a um Controle leiteiro e a
+   um Animal da mesma Fazenda.
 8. Litros/dia é métrica derivada (soma das Ordenhas do Animal na data) e nunca
    é persistida como Medição.
 9. Um Animal possui no máximo uma Lotação aberta.

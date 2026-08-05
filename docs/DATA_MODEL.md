@@ -242,8 +242,8 @@ Unicidade por Fazenda/data/escopo. Total geral e totais por Lote podem coexistir
 | --- | --- | --- |
 | `id`, `farm_id` | uuid | PK e escopo |
 | `session_id`, `animal_id` | uuid | mesma Fazenda |
-| `morning_liters` | numeric nullable | não negativo |
-| `afternoon_liters` | numeric nullable | não negativo |
+| `morning_liters` | numeric nullable | não negativo, 1 casa decimal, no máximo 100 L |
+| `afternoon_liters` | numeric nullable | não negativo, 1 casa decimal, no máximo 100 L |
 | `total_liters` | numeric | consistente com os períodos |
 | `raw_animal_label` | text nullable | preservado quando veio de Captura |
 | `raw_value_text` | text nullable | preservado quando veio de Captura |

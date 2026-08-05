@@ -59,6 +59,8 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'data ISO esperada (AAAA
 const time = z.string().regex(/^\d{2}:\d{2}$/, 'hora esperada (HH:MM)');
 const latLng = z.tuple([z.number(), z.number()]);
 const liters = z.number().positive('litros deve ser > 0');
+const isIndividualMilkLiters = (value: number) => Number.isFinite(value) && value >= 0 && value <= 100 && Math.abs(value * 10 - Math.round(value * 10)) < 1e-9;
+const individualLiters = z.number().refine(isIndividualMilkLiters, 'a medição deve estar entre 0 e 100 L e ter no máximo 1 casa decimal');
 const reason = z.string().trim().min(1, 'motivo é obrigatório');
 
 const proposalInput = z.object({
@@ -89,7 +91,7 @@ const reviewedProposalFields = z.array(
 const reviewedMeasurementBindings = z.array(
   z.object({
     animalId: z.string().min(1),
-    liters: z.number().positive(),
+    liters: individualLiters,
   }),
 );
 
@@ -122,7 +124,7 @@ export const actionSchema = z.discriminatedUnion('type', [
     type: z.literal('RecordIndividualMilkMeasurement'),
     sessionId: z.string().min(1),
     animalId: z.string().min(1),
-    liters: z.number().nonnegative(),
+    liters: individualLiters,
   }),
   z.object({ type: z.literal('CompleteMilkControlSession'), sessionId: z.string().min(1) }),
   z.object({ type: z.literal('RecordMilkCollection'), date: isoDate, time, liters }),
@@ -324,6 +326,9 @@ export async function executeCommand(tx: Tx, ctx: AuthContext, a: CommandAction)
     }
 
     case 'RecordIndividualMilkMeasurement': {
+      if (!isIndividualMilkLiters(a.liters)) {
+        throw badRequest('INVALID_MEASUREMENT', 'A medição individual deve estar entre 0 e 100 L.');
+      }
       const session = (
         await tx.select().from(milkControlSessions).where(and(eq(milkControlSessions.id, a.sessionId), eq(milkControlSessions.farmId, farmId))).limit(1)
       )[0];
@@ -331,14 +336,17 @@ export async function executeCommand(tx: Tx, ctx: AuthContext, a: CommandAction)
       if (session.status !== 'em_andamento') throw conflict('SESSION_CLOSED', 'O controle leiteiro já está concluído.');
       const animal = await findAnimal(tx, farmId, a.animalId);
       if (!animal) throw notFound('ANIMAL_NOT_FOUND', `Animal ${a.animalId} não encontrado.`);
-      // Upsert: 1 medição por animal por sessão (repetição corrige o valor).
+      const duplicate = await tx
+        .select({ id: individualMilkMeasurements.id })
+        .from(individualMilkMeasurements)
+        .where(and(eq(individualMilkMeasurements.sessionId, a.sessionId), eq(individualMilkMeasurements.animalId, a.animalId)))
+        .limit(1);
+      if (duplicate.length > 0) {
+        throw conflict('MEASUREMENT_EXISTS', `Já existe medição de ${animal.name} neste Controle leiteiro. Use Correção para ajustar o valor.`);
+      }
       const inserted = await tx
         .insert(individualMilkMeasurements)
         .values({ id: uid('mm'), sessionId: a.sessionId, animalId: a.animalId, liters: a.liters })
-        .onConflictDoUpdate({
-          target: [individualMilkMeasurements.sessionId, individualMilkMeasurements.animalId],
-          set: { liters: a.liters },
-        })
         .returning();
       await audit(tx, ctx, {
         action: 'registro',
@@ -792,13 +800,20 @@ export async function executeCommand(tx: Tx, ctx: AuthContext, a: CommandAction)
       const proposal = await findProposal(tx, farmId, a.proposalId);
       if (!proposal) throw notFound('PROPOSAL_NOT_FOUND', `Proposta ${a.proposalId} não encontrada.`);
       if (proposal.status !== 'pendente') return { proposal: toProposal(proposal) }; // idempotente
+      const claimed = await tx
+        .update(assistantProposals)
+        .set({ status: 'confirmada' })
+        .where(and(eq(assistantProposals.id, a.proposalId), eq(assistantProposals.status, 'pendente')))
+        .returning();
+      if (!claimed[0]) {
+        const current = await findProposal(tx, farmId, a.proposalId);
+        if (current) return { proposal: toProposal(current) };
+        throw notFound('PROPOSAL_NOT_FOUND', `Proposta ${a.proposalId} não encontrada.`);
+      }
       const materialized = await materializeAssistantProposal(tx, ctx, proposal, a.fields, a.bindings);
       const updated = await tx
         .update(assistantProposals)
-        .set({
-          status: 'confirmada',
-          confirmedRecordIds: materialized.recordIds,
-        })
+        .set({ confirmedRecordIds: materialized.recordIds })
         .where(eq(assistantProposals.id, a.proposalId))
         .returning();
       await audit(tx, ctx, {
@@ -870,7 +885,9 @@ function reviewedValue(fields: ProposalField[], key: string) {
 }
 
 function reviewedNumber(value: string) {
-  const numeric = Number(value.replace(/[^\d,.-]/g, '').replace(',', '.'));
+  const normalized = value.trim().replace(/\s/g, '');
+  if (!/^\d+(?:[,.]\d+)?$/.test(normalized)) return null;
+  const numeric = Number(normalized.replace(',', '.'));
   return Number.isFinite(numeric) ? numeric : null;
 }
 
@@ -952,10 +969,11 @@ async function materializeAssistantProposal(
   if (proposal.kind === 'lancamento_financeiro') {
     const date = reviewedDate(reviewedValue(fields, 'date'));
     const amount = reviewedNumber(reviewedValue(fields, 'amount'));
-    const kind = /receita/i.test(reviewedValue(fields, 'kind')) ? 'receita' : 'despesa';
+    const kindValue = normalizeAssistantLabel(reviewedValue(fields, 'kind'));
+    const kind = kindValue === 'receita' ? 'receita' : kindValue === 'despesa' ? 'despesa' : null;
     const description = reviewedValue(fields, 'description') || proposal.title;
-    if (!date || amount === null || amount <= 0) {
-      throw badRequest('INVALID_PROPOSAL', 'Confira data e valor do lançamento financeiro.');
+    if (!date || amount === null || amount <= 0 || !kind) {
+      throw badRequest('INVALID_PROPOSAL', 'Confira data, natureza e valor do lançamento financeiro.');
     }
     const amountCents = Math.round(amount * 100);
     const inserted = await tx
@@ -1033,11 +1051,11 @@ async function materializeAssistantProposal(
     const date = reviewedDate(reviewedValue(fields, 'date'));
     const groupName = normalizeAssistantLabel(reviewedValue(fields, 'group'));
     const shiftValue = normalizeAssistantLabel(reviewedValue(fields, 'shift'));
-    const shift = shiftValue.includes('tarde') ? 'tarde' : shiftValue.includes('unica') ? 'unica' : 'manha';
+    const shift = shiftValue === 'manha' ? 'manha' : shiftValue === 'tarde' ? 'tarde' : shiftValue === 'unica' ? 'unica' : null;
     const group = (await tx.select().from(herdGroups).where(eq(herdGroups.farmId, farmId)))
       .find((candidate) => normalizeAssistantLabel(candidate.name) === groupName);
     const rows = bindings ?? [];
-    if (!date || !group || rows.length === 0) {
+    if (!date || !group || !shift || rows.length === 0) {
       throw badRequest('INVALID_PROPOSAL', 'Confira data, Lote, turno e medições do Controle leiteiro.');
     }
     if ((group.milkingsPerDay === 1 && shift !== 'unica') || (group.milkingsPerDay === 2 && shift === 'unica')) {
@@ -1045,6 +1063,9 @@ async function materializeAssistantProposal(
     }
     if (new Set(rows.map((row) => row.animalId)).size !== rows.length) {
       throw badRequest('DUPLICATE_MEASUREMENT', 'O Controle leiteiro contém o mesmo Animal mais de uma vez.');
+    }
+    if (rows.some((row) => !isIndividualMilkLiters(row.liters))) {
+      throw badRequest('INVALID_MEASUREMENT', 'As medições individuais devem estar entre 0 e 100 L.');
     }
     const animalsById = new Map<string, { id: string; name: string }>();
     for (const row of rows) {
@@ -1085,13 +1106,17 @@ async function materializeAssistantProposal(
       });
     }
     for (const row of rows) {
+      const duplicate = await tx
+        .select({ id: individualMilkMeasurements.id })
+        .from(individualMilkMeasurements)
+        .where(and(eq(individualMilkMeasurements.sessionId, sessionId), eq(individualMilkMeasurements.animalId, row.animalId)))
+        .limit(1);
+      if (duplicate.length > 0) {
+        throw conflict('MEASUREMENT_EXISTS', `Já existe medição de ${animalsById.get(row.animalId)?.name ?? row.animalId} neste Controle leiteiro. Use Correção para ajustar o valor.`);
+      }
       const inserted = await tx
         .insert(individualMilkMeasurements)
         .values({ id: uid('mm'), sessionId, animalId: row.animalId, liters: row.liters })
-        .onConflictDoUpdate({
-          target: [individualMilkMeasurements.sessionId, individualMilkMeasurements.animalId],
-          set: { liters: row.liters },
-        })
         .returning();
       recordIds.push(inserted[0].id);
       await audit(tx, ctx, {

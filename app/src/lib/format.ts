@@ -29,8 +29,17 @@ export function formatCoverage(ratio: number): string {
 }
 
 export function parseDecimal(input: string): number | null {
-  const normalized = input.replace(",", ".").trim();
+  const normalized = input.trim();
   if (!normalized) return null;
-  const n = Number(normalized);
+  if (!/^\d+(?:[,.]\d+)?$/.test(normalized)) return null;
+  const n = Number(normalized.replace(",", "."));
   return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/** Litros de uma linha "Leite por vaca": até 3 dígitos inteiros, máximo 100 L. */
+export function parseMilkLiters(input: string): number | null {
+  const normalized = input.trim();
+  if (!/^\d{1,3}(?:[,.]\d)?$/.test(normalized)) return null;
+  const liters = Number(normalized.replace(",", "."));
+  return Number.isFinite(liters) && liters >= 0 && liters <= 100 ? liters : null;
 }

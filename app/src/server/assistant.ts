@@ -119,6 +119,7 @@ Regras invioláveis:
 - Números em português: “nove e meio” = 9.5; “1.234,5” = 1234.5.
 - Produção diária é um único volume por data para a Fazenda, sem turno e sem Lote.
 - Controle leiteiro é Lote + data + turno (MORNING ou AFTERNOON), com uma medição por Animal.
+- No controle leiteiro, leia linhas no padrão “animal - 7,5” ou “animal - 12.5”; o volume tem no máximo 3 dígitos inteiros, 1 casa decimal e fica entre 0 e 100 L. Nunca invente, junte ou corrija números malformados.
 - Coleta é retirada de leite, independente da Produção diária.
 - Trato é alimento fornecido a um Lote; compra de alimento é lançamento financeiro nesta V1.
 - Não diagnostique doença, não recomende descarte e não crie ocupação de Pasto ou Instalação a partir da fala.`;
@@ -126,7 +127,7 @@ Regras invioláveis:
 const ACTIONS = `Tipos de intent suportados:
 
 1) daily_milk_total: produção diária da Fazenda. Campos: date, scopeLabel, morningLiters, afternoonLiters, rawValueText, confidence, notes.
-2) individual_milk_session: controle leiteiro. Campos: date, scopeLabel, period, measurements[]. Cada medição tem animalLabel, morningLiters, afternoonLiters, totalLiters, rawValueText, confidence, notes.
+2) individual_milk_session: controle leiteiro. Campos: date, scopeLabel, period, measurements[]. Cada medição tem animalLabel, morningLiters, afternoonLiters, totalLiters, rawValueText, confidence, notes. Para “Leite por vaca”, preserve cada linha no padrão “animal - volume” e só aceite volumes de 0 a 100 L com 1 casa decimal (vírgula ou ponto).
 3) milk_collection: coleta. Campos: date, liters, time, sourceLabel, rawValueText, confidence, notes.
 4) revenue: receita. Campos: date, categoryLabel, description, amount, received, dueDate, confidence, notes.
 5) purchase: despesa. Campos: date, categoryLabel, description, amount, paid, dueDate, confidence, notes.
@@ -337,9 +338,25 @@ function nullableModelNumber(value: unknown): unknown {
   if (typeof value === 'number') return Number.isFinite(value) && value >= 0 ? value : null;
   if (typeof value !== 'string' || !value.trim()) return null;
   const compact = value.trim().replace(/\s/g, '');
+  if (!/^\d+(?:[,.]\d+)?$/.test(compact)) return null;
   const normalized = compact.includes(',') ? compact.replace(/\./g, '').replace(',', '.') : compact;
   const number = Number(normalized);
   return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function nullableIndividualMilkLiters(value: unknown): unknown {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value >= 0 && value <= 100 && Math.abs(value * 10 - Math.round(value * 10)) < 1e-9 ? value : null;
+  }
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const trimmed = value.trim();
+  const plain = trimmed.match(/^\d{1,3}(?:[,.]\d)?$/);
+  const ocrLine = trimmed.match(/^.+?\s*-\s*(\d{1,3}(?:[,.]\d)?)$/);
+  const rawNumber = plain?.[0] ?? ocrLine?.[1] ?? null;
+  if (!rawNumber) return null;
+  const parsed = Number(rawNumber.replace(',', '.'));
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 100 ? parsed : null;
 }
 
 function modelConfidence(value: unknown): 'HIGH' | 'MEDIUM' | 'LOW' {
@@ -385,9 +402,9 @@ function normalizeModelIntent(value: unknown): unknown {
         const measurement = item && typeof item === 'object' ? item as Record<string, unknown> : {};
         return {
           ...measurement,
-          morningLiters: nullableModelNumber(measurement.morningLiters),
-          afternoonLiters: nullableModelNumber(measurement.afternoonLiters),
-          totalLiters: nullableModelNumber(measurement.totalLiters),
+          morningLiters: nullableIndividualMilkLiters(measurement.morningLiters),
+          afternoonLiters: nullableIndividualMilkLiters(measurement.afternoonLiters),
+          totalLiters: nullableIndividualMilkLiters(measurement.totalLiters),
           rawValueText: typeof measurement.rawValueText === 'string' ? measurement.rawValueText : '',
           confidence: modelConfidence(measurement.confidence),
           notes: typeof measurement.notes === 'string' ? measurement.notes : null,

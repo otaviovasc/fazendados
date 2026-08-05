@@ -240,6 +240,15 @@ a exatamente uma Fazenda no V1, portanto a sessão resolve um único `farm_id`.
 Contas legadas sem hash não são autenticáveis até uma redefinição explícita de
 senha; a migration não inventa nem reprocessa a antiga `APP_PASSWORD`.
 
+### D-036 — Limite e leitura canônica da Medição individual
+
+Uma Medição individual de leite aceita de 0 a 100 L, com 1 casa decimal. Na
+entrada humana e na leitura de imagem, vírgula e ponto decimal são equivalentes
+(`12,5` e `12.5`); qualquer texto que misture o número com outros caracteres,
+como `12,5 L 3`, é inválido e deve voltar para Revisão sem ser convertido em
+fato. A linha esperada em “Leite por vaca” é `animal - volume`, preservando o
+texto original antes da confirmação humana.
+
 ## Pendentes
 
 | ID | Decisão | Recomendação atual |

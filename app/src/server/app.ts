@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb, type Tx } from '../db/client.js';
@@ -249,7 +249,13 @@ export function createApp() {
     const image = await getPrivateImage(attachment.storageKey, attachment.mimeType);
     const extractedText = await readImageCapture(image);
     const updated = await getDb().transaction(async (tx) => {
-      const row = (await tx.update(assistantCaptures).set({ extractedText }).where(and(eq(assistantCaptures.id, capture.id), eq(assistantCaptures.farmId, farm.id))).returning())[0];
+      const row = (await tx.update(assistantCaptures)
+        .set({ extractedText })
+        .where(and(eq(assistantCaptures.id, capture.id), eq(assistantCaptures.farmId, farm.id), isNull(assistantCaptures.extractedText)))
+        .returning())[0];
+      if (!row) {
+        return (await tx.select().from(assistantCaptures).where(and(eq(assistantCaptures.id, capture.id), eq(assistantCaptures.farmId, farm.id))).limit(1))[0];
+      }
       await auditAssistantMutation(tx, farm.id, user.id, 'leitura', 'captura', capture.id, 'Leitura literal da foto da Captura registrada.');
       return row;
     });
@@ -272,6 +278,9 @@ export function createApp() {
     if (!sourceText) throw new ApiError(400, 'CAPTURE_NOT_READ', 'Informe o texto ou leia a foto antes de interpretar a Captura.');
     const proposals = await interpretAssistantCapture(sourceText, await assistantContext(farm.id));
     const stored = await getDb().transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`assistant_capture:${farm.id}:${capture.id}`}))`);
+      const alreadyStored = await tx.select().from(assistantProposals).where(eq(assistantProposals.captureId, capture.id));
+      if (alreadyStored.length) return alreadyStored;
       const rows = [];
       for (const proposal of proposals) {
         const row = (await tx.insert(assistantProposals).values({ id: uid('prop'), captureId: capture.id, kind: proposal.kind, title: proposal.title, fields: proposal.fields, consequences: proposal.consequences, issues: proposal.issues, status: 'pendente', dismissReason: null, confirmedRecordIds: [] }).returning())[0];

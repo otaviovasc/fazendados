@@ -19,7 +19,7 @@ import type {
 } from "../../domain/types";
 import { captureOf, pendingProposals, useFarm } from "../../state/store";
 import { formatLong, today } from "../../lib/dates";
-import { parseDecimal } from "../../lib/format";
+import { parseMilkLiters } from "../../lib/format";
 import {
   Button,
   Chip,
@@ -83,7 +83,7 @@ function initRows(p: AssistantProposal, animals: Animal[]): RowReview[] | null {
     .map((part) => part.trim())
     .filter(Boolean)
     .map((part) => {
-      const m = part.match(/^(.+?)\s+([\d,.]+)$/);
+      const m = part.match(/^(.+?)\s*(?:-\s*)?(\d{1,3}(?:[,.]\d+)?)$/);
       const rawLabel = m ? m[1] : part;
       const liters = m ? m[2] : "";
       const match = matchAnimalLabel(rawLabel, animals);
@@ -205,7 +205,7 @@ export function ReviewSheet({
   const rowOk = (r: RowReview) =>
     r.animalId !== null &&
     (r.acknowledged || r.value !== r.original) &&
-    parseDecimal(r.value) !== null;
+    parseMilkLiters(r.value) !== null;
 
   const progress = useMemo(() => {
     const fieldUnits = fields.filter((f) => f.key !== "rows");
@@ -320,8 +320,8 @@ export function ReviewSheet({
     }));
     const bindings = rows
       ? rows
-          .filter((r) => r.animalId !== null && parseDecimal(r.value) !== null)
-          .map((r) => ({ animalId: r.animalId!, liters: parseDecimal(r.value)! }))
+          .filter((r) => r.animalId !== null && parseMilkLiters(r.value) !== null)
+          .map((r) => ({ animalId: r.animalId!, liters: parseMilkLiters(r.value)! }))
           : undefined;
     const confirmed = await dispatch({
       type: "ConfirmAssistantProposal",
@@ -479,9 +479,13 @@ export function ReviewSheet({
               </div>
               <div className="flex gap-2">
                 <Quote size={16} className="text-ink-faint shrink-0 mt-0.5" />
-                <p className="text-sm text-ink-soft italic">
-                  {capture?.text ?? capture?.extractedText ?? "Foto capturada; leitura original indisponível."}
-                </p>
+                <div className="space-y-2 text-sm text-ink-soft italic">
+                  {capture?.text && <p>Texto informado: {capture.text}</p>}
+                  {capture?.extractedText && <p>Leitura literal da foto: {capture.extractedText}</p>}
+                  {!capture?.text && !capture?.extractedText && (
+                    <p>Foto capturada; leitura original indisponível.</p>
+                  )}
+                </div>
               </div>
               {capture && captureImageReferences(capture).map((id) => (
                 <details key={id} className="mt-3">
@@ -633,6 +637,11 @@ export function ReviewSheet({
                               </button>
                             ) : null}
                           </div>
+                          {r.value.trim() && parseMilkLiters(r.value) === null && (
+                            <p className="text-xs text-review-700 mt-1.5" role="alert">
+                              Informe um volume entre 0 e 100 L, usando apenas um número, como 12,5 ou 12.5.
+                            </p>
+                          )}
                           {edited && (
                             <p className="text-xs text-ink-faint mt-1.5">
                               <span className="rounded-full bg-ink/5 text-ink-soft px-2 py-0.5 text-[11px] font-medium mr-1.5">
