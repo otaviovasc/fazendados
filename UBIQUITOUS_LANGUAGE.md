@@ -15,7 +15,7 @@
 | --- | --- | --- |
 | **Animal** | Bovino identificado e acompanhado pela Fazenda; identidade mínima no V1 é nome/brinco + status (ativo/arquivado). | Vaca, cabeça, item do rebanho |
 | **Lote** | Grupo operacional de animais manejados juntos em um período. | Grupo, rebanho, turma |
-| **Lotação** | Período datado em que um Animal pertence a um Lote. | Vínculo atual, grupo atual |
+| **Lotação** | Período datado, com início e fim inclusivos, em que um Animal pertence a um Lote. | Vínculo atual, grupo atual |
 | **Pasto** | Área física mapeada destinada à ocupação temporária de um Lote. | Piquete, zona, polígono |
 | **Perímetro da Fazenda** | Polígono oficial que delimita a área operacional da Fazenda. | Limite inferido, borda do mapa |
 | **Ocupação de pasto** | Período datado em que um Lote ocupa um Pasto. | Localização do lote |
@@ -87,6 +87,12 @@
 - Um **Anexo da Captura** pertence a uma única **Captura** e à mesma
   **Fazenda** dela; seus bytes permanecem fora do PostgreSQL.
 - Uma **Proposta** só produz **Registros** por uma **Confirmação**.
+- Se o Lote de um **Controle leiteiro** divergir da **Lotação** do Animal na
+  data, a **Revisão** exige escolher entre mover a Lotação nessa data ou
+  mantê-la e registrar somente a Medição.
+- Sugestão aproximada de Animal nunca cria vínculo automático. Brinco repetido
+  bloqueia cadastro; nome repetido exige vínculo ao existente, salvo quando os
+  dois Animais possuem brincos distintos.
 
 ## Exemplo de diálogo
 

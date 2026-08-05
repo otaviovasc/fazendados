@@ -87,6 +87,6 @@ export type Action =
       type: "ConfirmAssistantProposal";
       proposalId: string;
       fields: ProposalField[];
-      bindings?: { animalId: string; liters: number }[];
+      bindings?: { animalId: string; liters: number; assignmentAction?: "move" | "keep" }[];
     }
   | { type: "DismissAssistantProposal"; proposalId: string; reason?: string };

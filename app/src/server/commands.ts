@@ -92,6 +92,7 @@ const reviewedMeasurementBindings = z.array(
   z.object({
     animalId: z.string().min(1),
     liters: individualLiters,
+    assignmentAction: z.enum(['move', 'keep']).optional(),
   }),
 );
 
@@ -132,7 +133,7 @@ export const actionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('RegisterAnimal'),
     name: z.string().trim().min(1),
-    tag: z.string().optional(),
+    tag: z.string().trim().min(1).optional(),
     groupId: z.string().optional(),
     date: isoDate,
   }),
@@ -244,6 +245,96 @@ async function findGroup(tx: Tx, farmId: string, groupId: string) {
 async function findAnimal(tx: Tx, farmId: string, animalId: string) {
   const rows = await tx.select().from(animals).where(and(eq(animals.id, animalId), eq(animals.farmId, farmId))).limit(1);
   return rows[0] ?? null;
+}
+
+function previousDate(date: string) {
+  const value = new Date(`${date}T00:00:00.000Z`);
+  value.setUTCDate(value.getUTCDate() - 1);
+  return value.toISOString().slice(0, 10);
+}
+
+function earliestAssignmentEnd(
+  currentEnd: string | null,
+  nextStart: string | null,
+) {
+  const beforeNext = nextStart ? previousDate(nextStart) : null;
+  if (currentEnd === null) return beforeNext;
+  if (beforeNext === null) return currentEnd;
+  return currentEnd < beforeNext ? currentEnd : beforeNext;
+}
+
+async function lockAnimalAssignments(tx: Tx, farmId: string, animalId: string) {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtext(${`animal_assignment:${farmId}:${animalId}`}))`,
+  );
+}
+
+async function lockFarmAnimalIdentity(tx: Tx, farmId: string) {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtext(${`animal_identity:${farmId}`}))`,
+  );
+}
+
+async function assignmentsAtDate(tx: Tx, animalId: string, date: string) {
+  const assignments = await tx.select().from(animalGroupAssignments).where(eq(animalGroupAssignments.animalId, animalId));
+  return assignments.filter((assignment) => assignment.start <= date && (assignment.end === null || assignment.end >= date));
+}
+
+function hasDuplicateAnimalIdentity(
+  existing: { id: string; name: string; tag: string | null },
+  name: string,
+  tag: string | undefined,
+) {
+  const normalizedName = normalizeAssistantLabel(name);
+  const normalizedTag = tag ? normalizeAssistantLabel(tag) : null;
+  const existingTag = existing.tag ? normalizeAssistantLabel(existing.tag) : null;
+  if (normalizedTag && existingTag === normalizedTag) return true;
+  if (normalizeAssistantLabel(existing.name) !== normalizedName) return false;
+  return !(normalizedTag && existingTag && normalizedTag !== existingTag);
+}
+
+async function moveAnimalForAssistantControl(
+  tx: Tx,
+  ctx: AuthContext,
+  animal: { id: string; name: string },
+  group: { id: string; name: string },
+  date: string,
+  assignment: { id: string; groupId: string; start: string; end: string | null } | null,
+) {
+  const future = (await tx.select().from(animalGroupAssignments).where(eq(animalGroupAssignments.animalId, animal.id)))
+    .filter((candidate) => candidate.start > date)
+    .sort((left, right) => left.start.localeCompare(right.start))[0] ?? null;
+
+  if (assignment?.groupId === group.id) return { assignment, changed: false };
+
+  let moved;
+  if (assignment?.start === date) {
+    moved = (await tx.update(animalGroupAssignments)
+      .set({ groupId: group.id })
+      .where(eq(animalGroupAssignments.id, assignment.id))
+      .returning())[0];
+  } else {
+    if (assignment) {
+      await tx.update(animalGroupAssignments)
+        .set({ end: previousDate(date) })
+        .where(eq(animalGroupAssignments.id, assignment.id));
+    }
+    moved = (await tx.insert(animalGroupAssignments).values({
+      id: uid('as'),
+      animalId: animal.id,
+      groupId: group.id,
+      start: date,
+      end: earliestAssignmentEnd(assignment?.end ?? null, future?.start ?? null),
+    }).returning())[0];
+  }
+  await audit(tx, ctx, {
+    action: 'movimentacao',
+    entityType: 'lotacao',
+    entityId: moved.id,
+    description: `Lotação alterada pelo Assistente (${animal.name} → ${group.name})`,
+    origin: 'assistente',
+  });
+  return { assignment: moved, changed: true };
 }
 
 async function spatialPasture(tx: Tx, farmId: string, pastureId: string) {
@@ -430,6 +521,15 @@ export async function executeCommand(tx: Tx, ctx: AuthContext, a: CommandAction)
         const group = await findGroup(tx, farmId, a.groupId);
         if (!group) throw notFound('GROUP_NOT_FOUND', `Lote ${a.groupId} não encontrado.`);
       }
+      await lockFarmAnimalIdentity(tx, farmId);
+      const existingAnimals = await tx.select().from(animals).where(eq(animals.farmId, farmId));
+      const duplicate = existingAnimals.find((animal) => hasDuplicateAnimalIdentity(animal, a.name, a.tag));
+      if (duplicate) {
+        throw conflict(
+          'DUPLICATE_ANIMAL',
+          `Já existe um Animal com este nome ou brinco na Fazenda (${duplicate.name}). Confira o cadastro antes de continuar.`,
+        );
+      }
       const inserted = await tx
         .insert(animals)
         .values({ id: uid('a'), farmId, name: a.name, tag: a.tag ?? null, status: 'ativo' })
@@ -456,6 +556,15 @@ export async function executeCommand(tx: Tx, ctx: AuthContext, a: CommandAction)
     case 'UpdateAnimal': {
       const animal = await findAnimal(tx, farmId, a.animalId);
       if (!animal) throw notFound('ANIMAL_NOT_FOUND', `Animal ${a.animalId} não encontrado.`);
+      await lockFarmAnimalIdentity(tx, farmId);
+      const existingAnimals = await tx.select().from(animals).where(eq(animals.farmId, farmId));
+      const duplicate = existingAnimals.find((candidate) => candidate.id !== a.animalId && hasDuplicateAnimalIdentity(candidate, a.name, a.tag));
+      if (duplicate) {
+        throw conflict(
+          'DUPLICATE_ANIMAL',
+          `Já existe um Animal com este nome ou brinco na Fazenda (${duplicate.name}). Confira o cadastro antes de continuar.`,
+        );
+      }
       const updated = await tx
         .update(animals)
         .set({ name: a.name, tag: a.tag ?? null })
@@ -519,6 +628,7 @@ export async function executeCommand(tx: Tx, ctx: AuthContext, a: CommandAction)
       if (animal.status !== 'ativo') throw conflict('ANIMAL_ARCHIVED', `${animal.name} está arquivado.`);
       const group = await findGroup(tx, farmId, a.groupId);
       if (!group) throw notFound('GROUP_NOT_FOUND', `Lote ${a.groupId} não encontrado.`);
+      await lockAnimalAssignments(tx, farmId, a.animalId);
       const open = (
         await tx
           .select()
@@ -527,12 +637,33 @@ export async function executeCommand(tx: Tx, ctx: AuthContext, a: CommandAction)
           .limit(1)
       )[0];
       if (open?.groupId === a.groupId) throw conflict('SAME_GROUP', `${animal.name} já está no ${group.name}.`);
-      // Fecha a lotação aberta e abre a nova — atomicamente.
-      if (open) await tx.update(animalGroupAssignments).set({ end: a.date }).where(eq(animalGroupAssignments.id, open.id));
-      const inserted = await tx
-        .insert(animalGroupAssignments)
-        .values({ id: uid('as'), animalId: a.animalId, groupId: a.groupId, start: a.date, end: null })
-        .returning();
+      if (open && a.date < open.start) {
+        throw conflict(
+          'INVALID_ASSIGNMENT_DATE',
+          `A nova Lotação não pode começar antes da Lotação aberta de ${animal.name}.`,
+        );
+      }
+      // A data final é inclusiva. Uma troca no mesmo dia em que a Lotação
+      // começou corrige a linha; nos demais casos, fecha em D-1 e abre em D.
+      let inserted;
+      if (open?.start === a.date) {
+        inserted = await tx
+          .update(animalGroupAssignments)
+          .set({ groupId: a.groupId })
+          .where(eq(animalGroupAssignments.id, open.id))
+          .returning();
+      } else {
+        if (open) {
+          await tx
+            .update(animalGroupAssignments)
+            .set({ end: previousDate(a.date) })
+            .where(eq(animalGroupAssignments.id, open.id));
+        }
+        inserted = await tx
+          .insert(animalGroupAssignments)
+          .values({ id: uid('as'), animalId: a.animalId, groupId: a.groupId, start: a.date, end: null })
+          .returning();
+      }
       await audit(tx, ctx, {
         action: 'movimentacao',
         entityType: 'animal',
@@ -540,7 +671,10 @@ export async function executeCommand(tx: Tx, ctx: AuthContext, a: CommandAction)
         description: `Lotação alterada (${animal.name} → ${group.name})`,
         origin: 'manual',
       });
-      return { assignment: toAssignment(inserted[0]), closedAssignmentId: open?.id ?? null };
+      return {
+        assignment: toAssignment(inserted[0]),
+        closedAssignmentId: open && open.start !== a.date ? open.id : null,
+      };
     }
 
     case 'RegisterPasture': {
@@ -1068,10 +1202,53 @@ async function materializeAssistantProposal(
       throw badRequest('INVALID_MEASUREMENT', 'As medições individuais devem estar entre 0 e 100 L.');
     }
     const animalsById = new Map<string, { id: string; name: string }>();
+    const movedAssignmentIds: string[] = [];
     for (const row of rows) {
       const animal = await findAnimal(tx, farmId, row.animalId);
       if (!animal) throw notFound('ANIMAL_NOT_FOUND', `Animal ${row.animalId} não encontrado.`);
+      if (animal.status !== 'ativo') {
+        throw conflict('ANIMAL_ARCHIVED', `${animal.name} está arquivado e não pode receber nova Medição.`);
+      }
       animalsById.set(row.animalId, animal);
+    }
+    // Ordem estável evita deadlock quando duas Propostas contêm os mesmos
+    // Animais em ordens diferentes.
+    for (const animalId of [...animalsById.keys()].sort()) {
+      await lockAnimalAssignments(tx, farmId, animalId);
+    }
+    for (const row of rows) {
+      const animal = animalsById.get(row.animalId)!;
+      const assignments = await assignmentsAtDate(tx, animal.id, date);
+      if (assignments.length > 1) {
+        throw conflict('ASSIGNMENT_OVERLAP', `${animal.name} possui Lotação sobreposta em ${date}. Corrija o histórico antes de confirmar o Controle.`);
+      }
+      const assignment = assignments[0] ?? null;
+      const assignmentMatchesControlGroup = assignment?.groupId === group.id;
+      if (assignmentMatchesControlGroup && row.assignmentAction) {
+        throw badRequest(
+          'UNNECESSARY_ASSIGNMENT_DECISION',
+          `${animal.name} já estava lotada em ${group.name} em ${date}.`,
+        );
+      }
+      if (!assignmentMatchesControlGroup && !row.assignmentAction) {
+        throw badRequest(
+          'ASSIGNMENT_DECISION_REQUIRED',
+          `${animal.name} não estava lotada em ${group.name} em ${date}. Escolha manter somente a medição ou mover a Lotação.`,
+        );
+      }
+      if (!assignmentMatchesControlGroup && row.assignmentAction === 'move') {
+        const moved = await moveAnimalForAssistantControl(tx, ctx, animal, group, date, assignment);
+        if (moved.changed) movedAssignmentIds.push(moved.assignment.id);
+      }
+      if (!assignmentMatchesControlGroup && row.assignmentAction === 'keep') {
+        await audit(tx, ctx, {
+          action: 'confirmacao',
+          entityType: 'lotacao',
+          entityId: assignment?.id ?? animal.id,
+          description: `Lotação mantida na divergência do Controle (${animal.name}, ${group.name}, ${date})`,
+          origin: 'assistente',
+        });
+      }
     }
     const existing = (await tx
       .select()
@@ -1136,8 +1313,8 @@ async function materializeAssistantProposal(
       origin,
     });
     return {
-      facts: rows.length + 1,
-      recordIds: [sessionId, ...recordIds],
+      facts: rows.length + 1 + movedAssignmentIds.length,
+      recordIds: [sessionId, ...recordIds, ...movedAssignmentIds],
       summary: `${rows.length} ${rows.length === 1 ? 'medição registrada' : 'medições registradas'} — ${group.name}`,
     };
   }

@@ -99,24 +99,26 @@ Como Agrônomo operador, quero cadastrar um Animal com a menor informação real
 necessária para associar futuras medições.
 
 **Aceite:** identidade mínima = nome/brinco + status (ativo/arquivado); nenhum
-campo adicional no V1; duplicidade local alertada; cadastro manual e via
-Assistente usam o mesmo comando.
+campo adicional no V1; brinco repetido bloqueia cadastro; nome repetido
+direciona ao Animal existente, salvo quando ambos possuem brincos distintos;
+cadastro manual e via Assistente usam o mesmo comando.
 
 ### US-HE-02 — Buscar e reconhecer Animal (`MUST`)
 
 Como Agrônomo operador, quero localizar por brinco ou nome para não registrar no Animal
 errado.
 
-**Aceite:** busca tolera caixa/acentos; resultados mostram informação distintiva;
-nenhuma fusão aproximada automática.
+**Aceite:** busca tolera caixa/acentos e até dois erros em nomes longos;
+resultados mostram informação distintiva; nenhuma fusão aproximada automática.
 
 ### US-HE-03 — Formar e alterar Lote (`MUST`)
 
 Como Agrônomo operador, quero mover um Animal entre Lotes com data para preservar o
 histórico de manejo.
 
-**Aceite:** uma Lotação aberta; datas consistentes; mudança atômica; histórico
-visível no Animal e no Lote.
+**Aceite:** uma Lotação por data; início e fim inclusivos; mudança em `D`
+encerra a anterior em `D-1`; mudança atômica; histórico visível no Animal e no
+Lote.
 
 ### US-HE-04 — Arquivar Animal (`MUST`)
 

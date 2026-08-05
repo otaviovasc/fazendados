@@ -258,6 +258,23 @@ Controle leiteiro e Animal, uma nova Confirmação é rejeitada e o Registro
 existente permanece intacto. Qualquer substituição futura deverá ocorrer por
 um comando explícito de Correção, com motivo e auditoria antes/depois.
 
+### D-038 — Divergência de Lotação e identidade na Revisão
+
+O Controle leiteiro consulta a Lotação do Animal na data revisada. Se ela não
+existir ou pertencer a outro Lote, a Confirmação exige uma decisão humana por
+linha: **mover**, criando a nova Lotação a partir da data do Controle, ou
+**manter**, preservando o histórico e registrando somente a Medição. Ambas as
+decisões são auditáveis e nenhuma inferência da IA movimenta um Animal.
+
+Datas de Lotação são inclusivas: uma movimentação em `D` encerra a Lotação
+anterior em `D-1`. Movimentações concorrentes do mesmo Animal são serializadas
+na transação e sobreposições preexistentes bloqueiam a Confirmação.
+
+O reconhecimento aproximado de Animal gera apenas sugestões. Brinco normalizado
+repetido sempre bloqueia novo cadastro. Nome normalizado repetido bloqueia
+quando um dos Animais não tem brinco; dois Animais com o mesmo nome só podem
+coexistir quando ambos possuem brincos não vazios e distintos.
+
 ## Pendentes
 
 | ID | Decisão | Recomendação atual |

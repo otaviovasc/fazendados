@@ -81,7 +81,8 @@ flowchart LR
    um Animal da mesma Fazenda.
 8. Litros/dia é métrica derivada (soma das Ordenhas do Animal na data) e nunca
    é persistida como Medição.
-9. Um Animal possui no máximo uma Lotação aberta.
+9. Um Animal possui no máximo uma Lotação em qualquer data. Início e fim são
+   inclusivos; ao mover em `D`, a Lotação anterior termina em `D-1`.
 10. Um Lote ocupa no máximo um Pasto por vez; um Pasto abriga no máximo um Lote
     por vez.
 11. O Saldo de alimento é derivado e não editável diretamente.

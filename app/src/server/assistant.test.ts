@@ -4,6 +4,7 @@ import { actionSchema, executeCommand, type CommandAction } from './commands.js'
 import { ApiError } from './http.js';
 import {
   assistantProposals,
+  animalGroupAssignments,
   auditEvents,
   financialEntries,
   herdGroups,
@@ -300,6 +301,8 @@ function createMemoryTx(options: {
   proposal: ReturnType<typeof proposal>;
   groups?: Array<{ id: string; farmId: string; name: string; milkingsPerDay: 1 | 2 }>;
   animals?: Array<{ id: string; farmId: string; name: string; tag: string | null; status: string }>;
+  crossFarmAnimals?: Array<{ id: string; farmId: string; name: string; tag: string | null; status: string }>;
+  assignments?: Array<{ id: string; animalId: string; groupId: string; start: string; end: string | null }>;
   sessions?: Array<{ id: string; farmId: string; date: string; groupId: string; shift: string; status: string; origin: string }>;
   measurements?: Array<{ id: string; sessionId: string; animalId: string; liters: number }>;
   staleProposalReads?: boolean;
@@ -307,7 +310,8 @@ function createMemoryTx(options: {
   const state = {
     proposal: options.proposal,
     groups: options.groups ?? [],
-    animals: options.animals ?? [],
+    animals: [...(options.animals ?? []), ...(options.crossFarmAnimals ?? [])],
+    assignments: options.assignments ?? [],
     sessions: options.sessions ?? [],
     measurements: options.measurements ?? [],
     financialEntries: [] as unknown[],
@@ -318,7 +322,8 @@ function createMemoryTx(options: {
   const tableRows = (table: unknown) => {
     if (table === assistantProposals) return [state.proposal];
     if (table === herdGroups) return state.groups;
-    if (table === animals) return state.animals;
+    if (table === animals) return state.animals.filter((animal: { farmId: string }) => animal.farmId === auth.farm.id);
+    if (table === animalGroupAssignments) return state.assignments;
     if (table === milkControlSessions) return state.sessions;
     if (table === individualMilkMeasurements) return state.measurements;
     return [];
@@ -326,6 +331,9 @@ function createMemoryTx(options: {
 
   const tx = {
     state,
+    execute() {
+      return { rows: [] };
+    },
     select(selection?: unknown) {
       const query = {
         from(table: unknown) {
@@ -355,13 +363,15 @@ function createMemoryTx(options: {
     insert(table: unknown) {
       return {
         values(value: any) {
+          if (table === auditEvents) state.audits.push(value);
           return {
             onConflictDoUpdate() { return this; },
             returning() {
               if (table === financialEntries) state.financialEntries.push(value);
-              if (table === auditEvents) state.audits.push(value);
               if (table === milkControlSessions) state.sessions.push(value);
               if (table === individualMilkMeasurements) state.measurements.push(value);
+              if (table === animals) state.animals.push(value);
+              if (table === animalGroupAssignments) state.assignments.push(value);
               return Array.isArray(value) ? value : [value];
             },
           };
@@ -373,6 +383,9 @@ function createMemoryTx(options: {
         set(value: any) {
           return {
             where() {
+              if (table === animalGroupAssignments) {
+                state.assignments = state.assignments.map((assignment) => ({ ...assignment, ...value }));
+              }
               return {
                 returning() {
                   if (table === assistantProposals) {
@@ -384,6 +397,10 @@ function createMemoryTx(options: {
                   if (table === milkControlSessions) {
                     state.sessions = state.sessions.map((session) => ({ ...session, ...value }));
                     return state.sessions;
+                  }
+                  if (table === animalGroupAssignments) {
+                    state.assignments = state.assignments.map((assignment) => ({ ...assignment, ...value }));
+                    return state.assignments;
                   }
                   return [];
                 },
@@ -429,6 +446,7 @@ test('confirmação de controle leiteiro rejeita medição existente sem correç
     ]),
     groups: [{ id: 'group1', farmId: 'farm1', name: 'Lote 1', milkingsPerDay: 2 }],
     animals: [{ id: 'animal1', farmId: 'farm1', name: 'Mimosa', tag: null, status: 'ativo' }],
+    assignments: [{ id: 'as1', animalId: 'animal1', groupId: 'group1', start: '2026-01-01', end: null }],
     sessions: [{ id: 'session1', farmId: 'farm1', date: '2026-08-04', groupId: 'group1', shift: 'manha', status: 'em_andamento', origin: 'assistente' }],
     measurements: [{ id: 'mm1', sessionId: 'session1', animalId: 'animal1', liters: 7.5 }],
   });
@@ -466,6 +484,233 @@ test('confirmação rejeita controle leiteiro sem turno explícito', async () =>
   );
 });
 
+function milkControlProposal() {
+  return proposal('controle_leiteiro', [
+    { key: 'date', value: '2026-08-04' },
+    { key: 'group', value: 'Lote 1' },
+    { key: 'shift', value: 'Manhã' },
+  ]);
+}
+
+const milkControlGroup = { id: 'group1', farmId: 'farm1', name: 'Lote 1', milkingsPerDay: 2 as const };
+const otherGroup = { id: 'group2', farmId: 'farm1', name: 'Lote 2', milkingsPerDay: 2 as const };
+const mimosa = { id: 'animal1', farmId: 'farm1', name: 'Mimosa', tag: '001', status: 'ativo' };
+
+test('confirma controle com Animal já lotado no Lote informado sem exigir decisão', async () => {
+  const tx = createMemoryTx({
+    proposal: milkControlProposal(), groups: [milkControlGroup], animals: [mimosa],
+    assignments: [{ id: 'as1', animalId: mimosa.id, groupId: milkControlGroup.id, start: '2026-01-01', end: null }],
+  });
+
+  const result = await executeCommand(tx, auth, {
+    type: 'ConfirmAssistantProposal', proposalId: tx.state.proposal.id, fields: tx.state.proposal.fields,
+    bindings: [{ animalId: mimosa.id, liters: 8 }],
+  } satisfies CommandAction) as { facts: number; recordIds: string[] };
+
+  assert.equal(result.facts, 2);
+  assert.equal(tx.state.assignments.length, 1);
+  assert.equal(result.recordIds.length, 2);
+});
+
+test('rejeita Controle com Lotação divergente sem decisão e não materializa fatos', async () => {
+  const tx = createMemoryTx({
+    proposal: milkControlProposal(), groups: [milkControlGroup, otherGroup], animals: [mimosa],
+    assignments: [{ id: 'as1', animalId: mimosa.id, groupId: otherGroup.id, start: '2026-01-01', end: null }],
+  });
+
+  await assert.rejects(
+    executeCommand(tx, auth, {
+      type: 'ConfirmAssistantProposal', proposalId: tx.state.proposal.id, fields: tx.state.proposal.fields,
+      bindings: [{ animalId: mimosa.id, liters: 8 }],
+    } satisfies CommandAction),
+    (error: unknown) => error instanceof ApiError && error.code === 'ASSIGNMENT_DECISION_REQUIRED',
+  );
+  assert.equal(tx.state.sessions.length, 0);
+  assert.equal(tx.state.measurements.length, 0);
+});
+
+test('rejeita Controle sem Lotação na data até haver uma decisão explícita', async () => {
+  const tx = createMemoryTx({ proposal: milkControlProposal(), groups: [milkControlGroup], animals: [mimosa] });
+
+  await assert.rejects(
+    executeCommand(tx, auth, {
+      type: 'ConfirmAssistantProposal', proposalId: tx.state.proposal.id, fields: tx.state.proposal.fields,
+      bindings: [{ animalId: mimosa.id, liters: 8 }],
+    } satisfies CommandAction),
+    (error: unknown) => error instanceof ApiError && error.code === 'ASSIGNMENT_DECISION_REQUIRED',
+  );
+  assert.equal(tx.state.sessions.length, 0);
+});
+
+test('rejeita decisão de Lotação desnecessária para não aplicar escolha obsoleta', async () => {
+  const tx = createMemoryTx({
+    proposal: milkControlProposal(), groups: [milkControlGroup], animals: [mimosa],
+    assignments: [{ id: 'as1', animalId: mimosa.id, groupId: milkControlGroup.id, start: '2026-01-01', end: null }],
+  });
+
+  await assert.rejects(
+    executeCommand(tx, auth, {
+      type: 'ConfirmAssistantProposal', proposalId: tx.state.proposal.id, fields: tx.state.proposal.fields,
+      bindings: [{ animalId: mimosa.id, liters: 8, assignmentAction: 'move' }],
+    } satisfies CommandAction),
+    (error: unknown) => error instanceof ApiError && error.code === 'UNNECESSARY_ASSIGNMENT_DECISION',
+  );
+});
+
+test('rejeita histórico com Lotação sobreposta antes de materializar o Controle', async () => {
+  const tx = createMemoryTx({
+    proposal: milkControlProposal(), groups: [milkControlGroup, otherGroup], animals: [mimosa],
+    assignments: [
+      { id: 'as1', animalId: mimosa.id, groupId: milkControlGroup.id, start: '2026-01-01', end: null },
+      { id: 'as2', animalId: mimosa.id, groupId: otherGroup.id, start: '2026-08-01', end: null },
+    ],
+  });
+
+  await assert.rejects(
+    executeCommand(tx, auth, {
+      type: 'ConfirmAssistantProposal', proposalId: tx.state.proposal.id, fields: tx.state.proposal.fields,
+      bindings: [{ animalId: mimosa.id, liters: 8 }],
+    } satisfies CommandAction),
+    (error: unknown) => error instanceof ApiError && error.code === 'ASSIGNMENT_OVERLAP',
+  );
+  assert.equal(tx.state.sessions.length, 0);
+});
+
+test('rejeita nova Medição para Animal arquivado', async () => {
+  const archived = { ...mimosa, status: 'arquivado' };
+  const tx = createMemoryTx({
+    proposal: milkControlProposal(), groups: [milkControlGroup], animals: [archived],
+    assignments: [{ id: 'as1', animalId: archived.id, groupId: milkControlGroup.id, start: '2026-01-01', end: null }],
+  });
+
+  await assert.rejects(
+    executeCommand(tx, auth, {
+      type: 'ConfirmAssistantProposal', proposalId: tx.state.proposal.id, fields: tx.state.proposal.fields,
+      bindings: [{ animalId: archived.id, liters: 8 }],
+    } satisfies CommandAction),
+    (error: unknown) => error instanceof ApiError && error.code === 'ANIMAL_ARCHIVED',
+  );
+});
+
+test('keep confirma somente a Medição quando a Lotação diverge', async () => {
+  const tx = createMemoryTx({
+    proposal: milkControlProposal(), groups: [milkControlGroup, otherGroup], animals: [mimosa],
+    assignments: [{ id: 'as1', animalId: mimosa.id, groupId: otherGroup.id, start: '2026-01-01', end: null }],
+  });
+
+  const result = await executeCommand(tx, auth, {
+    type: 'ConfirmAssistantProposal', proposalId: tx.state.proposal.id, fields: tx.state.proposal.fields,
+    bindings: [{ animalId: mimosa.id, liters: 8, assignmentAction: 'keep' }],
+  } satisfies CommandAction) as { facts: number; recordIds: string[] };
+
+  assert.equal(result.facts, 2);
+  assert.equal(tx.state.assignments[0].groupId, otherGroup.id);
+  assert.equal(result.recordIds.length, 2);
+  assert.equal(
+    tx.state.audits.some(
+      (audit: { entityType: string; action: string }) =>
+        audit.entityType === 'lotacao' && audit.action === 'confirmacao',
+    ),
+    true,
+  );
+});
+
+test('move cria Lotação assistida, fecha a aberta e devolve seu ID entre os fatos', async () => {
+  const tx = createMemoryTx({
+    proposal: milkControlProposal(), groups: [milkControlGroup, otherGroup], animals: [mimosa],
+    assignments: [{ id: 'as1', animalId: mimosa.id, groupId: otherGroup.id, start: '2026-01-01', end: null }],
+  });
+
+  const result = await executeCommand(tx, auth, {
+    type: 'ConfirmAssistantProposal', proposalId: tx.state.proposal.id, fields: tx.state.proposal.fields,
+    bindings: [{ animalId: mimosa.id, liters: 8, assignmentAction: 'move' }],
+  } satisfies CommandAction) as { facts: number; recordIds: string[] };
+
+  const moved = tx.state.assignments.find((assignment: { groupId: string }) => assignment.groupId === milkControlGroup.id);
+  assert.equal(tx.state.assignments[0].end, '2026-08-03');
+  assert.equal(moved.start, '2026-08-04');
+  assert.equal(moved.end, null);
+  assert.equal(result.facts, 3);
+  assert.ok(result.recordIds.includes(moved.id));
+  assert.equal(tx.state.audits.some((audit: { entityType: string; origin: string }) => audit.entityType === 'lotacao' && audit.origin === 'assistente'), true);
+});
+
+test('move histórico encerra a Lotação inserida antes da próxima Lotação', async () => {
+  const tx = createMemoryTx({
+    proposal: milkControlProposal(), groups: [milkControlGroup, otherGroup], animals: [mimosa],
+    assignments: [
+      { id: 'as1', animalId: mimosa.id, groupId: otherGroup.id, start: '2026-01-01', end: null },
+      { id: 'as2', animalId: mimosa.id, groupId: otherGroup.id, start: '2026-08-10', end: null },
+    ],
+  });
+
+  await executeCommand(tx, auth, {
+    type: 'ConfirmAssistantProposal', proposalId: tx.state.proposal.id, fields: tx.state.proposal.fields,
+    bindings: [{ animalId: mimosa.id, liters: 8, assignmentAction: 'move' }],
+  } satisfies CommandAction);
+
+  const imported = tx.state.assignments.find((assignment: { groupId: string; start: string }) => assignment.groupId === milkControlGroup.id && assignment.start === '2026-08-04');
+  assert.equal(imported.end, '2026-08-09');
+});
+
+test('move histórico não estende uma Lotação que já tinha fim', async () => {
+  const tx = createMemoryTx({
+    proposal: milkControlProposal(), groups: [milkControlGroup, otherGroup], animals: [mimosa],
+    assignments: [
+      { id: 'as1', animalId: mimosa.id, groupId: otherGroup.id, start: '2026-01-01', end: '2026-08-06' },
+      { id: 'as2', animalId: mimosa.id, groupId: otherGroup.id, start: '2026-09-01', end: null },
+    ],
+  });
+
+  await executeCommand(tx, auth, {
+    type: 'ConfirmAssistantProposal', proposalId: tx.state.proposal.id, fields: tx.state.proposal.fields,
+    bindings: [{ animalId: mimosa.id, liters: 8, assignmentAction: 'move' }],
+  } satisfies CommandAction);
+
+  const imported = tx.state.assignments.find(
+    (assignment: { groupId: string; start: string }) =>
+      assignment.groupId === milkControlGroup.id && assignment.start === '2026-08-04',
+  );
+  assert.equal(imported.end, '2026-08-06');
+});
+
+test('movimentação manual encerra a Lotação anterior no dia anterior', async () => {
+  const tx = createMemoryTx({
+    proposal: milkControlProposal(), groups: [milkControlGroup, otherGroup], animals: [mimosa],
+    assignments: [{ id: 'as1', animalId: mimosa.id, groupId: otherGroup.id, start: '2026-01-01', end: null }],
+  });
+
+  const result = await executeCommand(tx, auth, {
+    type: 'AssignAnimalToGroup',
+    animalId: mimosa.id,
+    groupId: milkControlGroup.id,
+    date: '2026-08-04',
+  } satisfies CommandAction) as { assignment: { start: string }; closedAssignmentId: string | null };
+
+  assert.equal(tx.state.assignments[0].end, '2026-08-03');
+  assert.equal(result.assignment.start, '2026-08-04');
+  assert.equal(result.closedAssignmentId, 'as1');
+});
+
+test('movimentação manual no dia inicial corrige a Lotação sem criar sobreposição', async () => {
+  const tx = createMemoryTx({
+    proposal: milkControlProposal(), groups: [milkControlGroup, otherGroup], animals: [mimosa],
+    assignments: [{ id: 'as1', animalId: mimosa.id, groupId: otherGroup.id, start: '2026-08-04', end: null }],
+  });
+
+  const result = await executeCommand(tx, auth, {
+    type: 'AssignAnimalToGroup',
+    animalId: mimosa.id,
+    groupId: milkControlGroup.id,
+    date: '2026-08-04',
+  } satisfies CommandAction) as { assignment: { id: string; groupId: string }; closedAssignmentId: string | null };
+
+  assert.equal(tx.state.assignments.length, 1);
+  assert.equal(result.assignment.id, 'as1');
+  assert.equal(result.assignment.groupId, milkControlGroup.id);
+  assert.equal(result.closedAssignmentId, null);
+});
+
 test('segunda confirmação concorrente da mesma proposta não materializa duplicatas', async () => {
   const tx = createMemoryTx({
     proposal: proposal('lancamento_financeiro', [
@@ -488,4 +733,48 @@ test('segunda confirmação concorrente da mesma proposta não materializa dupli
   await executeCommand(tx, auth, action);
 
   assert.equal(tx.state.financialEntries.length, 1);
+});
+
+test('RegisterAnimal rejeita nome ou brinco duplicados, ignorando caixa e acentos', async () => {
+  for (const input of [
+    { name: 'mimosa' },
+    { name: 'Outra', tag: ' brinco-á ' },
+  ]) {
+    const tx = createMemoryTx({
+      proposal: proposal('coleta', []),
+      animals: [{ id: 'animal1', farmId: 'farm1', name: 'Mimósa', tag: 'Brinco-A', status: 'ativo' }],
+    });
+    await assert.rejects(
+      executeCommand(tx, auth, { type: 'RegisterAnimal', ...input, date: '2026-08-04' } satisfies CommandAction),
+      (error: unknown) => error instanceof ApiError && error.code === 'DUPLICATE_ANIMAL',
+    );
+    assert.equal(tx.state.animals.length, 1);
+  }
+});
+
+test('RegisterAnimal permite a mesma identidade existente em outra Fazenda', async () => {
+  const tx = createMemoryTx({
+    proposal: proposal('coleta', []),
+    crossFarmAnimals: [{ id: 'animal-other', farmId: 'farm2', name: 'Mimósa', tag: 'Brinco-A', status: 'ativo' }],
+  });
+
+  const result = await executeCommand(tx, auth, {
+    type: 'RegisterAnimal', name: 'Mimosa', tag: 'brinco-a', date: '2026-08-04',
+  } satisfies CommandAction) as { animal: { id: string; name: string } };
+
+  assert.equal(result.animal.name, 'Mimosa');
+  assert.equal(tx.state.animals.length, 2);
+});
+
+test('RegisterAnimal permite mesmo nome quando os dois brincos são distintos', async () => {
+  const tx = createMemoryTx({
+    proposal: proposal('coleta', []),
+    animals: [{ id: 'animal1', farmId: 'farm1', name: 'Mimosa', tag: '001', status: 'ativo' }],
+  });
+
+  await executeCommand(tx, auth, {
+    type: 'RegisterAnimal', name: 'Mimósa', tag: '002', date: '2026-08-04',
+  } satisfies CommandAction);
+
+  assert.equal(tx.state.animals.length, 2);
 });

@@ -154,7 +154,9 @@ Constraint: `identifier` ou `name` deve existir. Arquivar não apaga medições.
 | `ended_on` | date nullable | maior ou igual ao início |
 | `notes` | text nullable | opcional |
 
-Índice parcial: no máximo uma Lotação aberta por Animal.
+Índice parcial: no máximo uma Lotação aberta por Animal. Os comandos também
+validam que não exista mais de uma Lotação por data. `start` e `end` são
+inclusivos; ao mover em `D`, a linha anterior termina em `D-1`.
 
 ## Espaço físico
 

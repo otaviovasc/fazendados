@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   Beef,
@@ -34,6 +34,10 @@ import {
   type Suggestion,
 } from "./matching";
 import {
+  assignmentReview,
+  exactAnimalDuplicate,
+} from "./reviewLogic";
+import {
   CONFIDENCE_DOT,
   CONFIDENCE_LABEL,
   KIND_LABEL,
@@ -62,6 +66,10 @@ interface RowReview {
   probable: boolean; // vínculo provável: exige um toque para confirmar
   suggestions: Suggestion[];
   acknowledged: boolean;
+  /** Escolha humana exigida quando a Lotação não bate com o Lote do Controle. */
+  assignmentAction?: "move" | "keep";
+  /** Evita reutilizar uma escolha após trocar Animal, Lote ou data. */
+  assignmentDecisionFor?: string;
 }
 
 function initFields(p: AssistantProposal): FieldReview[] {
@@ -154,6 +162,7 @@ export function ReviewSheet({
     row: number;
     name: string;
     tag: string;
+    createConfirmed: boolean;
   } | null>(null);
   const [cadastroBusy, setCadastroBusy] = useState(false);
   const [cadastroError, setCadastroError] = useState<string | null>(null);
@@ -169,14 +178,17 @@ export function ReviewSheet({
   // vincula a linha que pediu o cadastro.
   useEffect(() => {
     if (!pendingBind) return;
-    const found = state.animals.find(
-      (a) =>
-        a.status === "ativo" &&
-        (normalizeLabel(a.name) === normalizeLabel(pendingBind.name) ||
-          (pendingBind.tag !== "" &&
-            a.tag !== undefined &&
-            normalizeLabel(a.tag) === normalizeLabel(pendingBind.tag)))
-    );
+    const found = pendingBind.tag
+      ? state.animals.find(
+          (animal) =>
+            animal.status === "ativo" &&
+            normalizeLabel(animal.tag ?? "") === normalizeLabel(pendingBind.tag),
+        )
+      : state.animals.find(
+          (animal) =>
+            animal.status === "ativo" &&
+            normalizeLabel(animal.name) === normalizeLabel(pendingBind.name),
+        );
     if (!found) return;
     setRows(
       (rs) =>
@@ -189,6 +201,8 @@ export function ReviewSheet({
                 animalName: found.name,
                 probable: false,
                 acknowledged: true,
+                assignmentAction: undefined,
+                assignmentDecisionFor: undefined,
               }
             : r
         )
@@ -198,28 +212,72 @@ export function ReviewSheet({
   }, [state.animals, pendingBind]);
 
   const get = (k: string) => fields.find((f) => f.key === k)?.value ?? "";
+  const reviewedDate = get("date");
   const resolvedGroup = state.groups.find(
     (g) => normalizeLabel(g.name) === normalizeLabel(get("group"))
   );
+  const cadastroDuplicate = cadastro
+    ? exactAnimalDuplicate(state.animals, cadastro.name.trim(), cadastro.tag.trim())
+    : undefined;
+  const cadastroSuggestions =
+    cadastro && !cadastroDuplicate
+      ? matchAnimalLabel(
+          `${cadastro.name} ${cadastro.tag}`.trim(),
+          state.animals,
+        ).suggestions
+      : [];
+
+  const assignmentFor = (r: RowReview) =>
+    assignmentReview(
+      state.assignments,
+      state.groups,
+      r.animalId,
+      resolvedGroup,
+      reviewedDate
+    );
+  const hasCurrentAssignmentDecision = (r: RowReview) => {
+    const review = assignmentFor(r);
+    return (
+      !review.needsDecision ||
+      (r.assignmentDecisionFor === review.decisionKey &&
+        (r.assignmentAction === "move" || r.assignmentAction === "keep"))
+    );
+  };
 
   const rowOk = (r: RowReview) =>
     r.animalId !== null &&
     (r.acknowledged || r.value !== r.original) &&
-    parseMilkLiters(r.value) !== null;
+    parseMilkLiters(r.value) !== null &&
+    hasCurrentAssignmentDecision(r);
 
-  const progress = useMemo(() => {
-    const fieldUnits = fields.filter((f) => f.key !== "rows");
-    const done =
-      fieldUnits.filter((f) => f.acknowledged || f.value !== f.original)
-        .length + (rows ?? []).filter(rowOk).length;
-    return { total: fieldUnits.length + (rows ?? []).length, done };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fields, rows]);
+  const fieldUnits = fields.filter((field) => field.key !== "rows");
+  const progress = {
+    total: fieldUnits.length + (rows ?? []).length,
+    done:
+      fieldUnits.filter(
+        (field) => field.acknowledged || field.value !== field.original,
+      ).length + (rows ?? []).filter(rowOk).length,
+  };
 
   if (!proposal) return null;
 
   const groupOk = proposal.kind !== "controle_leiteiro" || Boolean(resolvedGroup);
   const allChecked = progress.done === progress.total && groupOk;
+  const chosenMoves = (rows ?? []).filter((row) => {
+    const review = assignmentFor(row);
+    return (
+      row.assignmentAction === "move" &&
+      row.assignmentDecisionFor === review.decisionKey
+    );
+  });
+  const chosenKeeps = (rows ?? []).filter((row) => {
+    const review = assignmentFor(row);
+    return (
+      review.needsDecision &&
+      row.assignmentAction === "keep" &&
+      row.assignmentDecisionFor === review.decisionKey
+    );
+  });
 
   // Qualquer interação após uma falha de registro limpa o aviso; a primeira
   // já marca a Revisão como alterada (sair pede confirmação de descarte).
@@ -230,6 +288,17 @@ export function ReviewSheet({
   const updateField = (key: string, value: string) => {
     touch();
     setFields((fs) => fs.map((f) => (f.key === key ? { ...f, value } : f)));
+    if (key === "date" || key === "group") {
+      setRows(
+        (rs) =>
+          rs &&
+          rs.map((row) => ({
+            ...row,
+            assignmentAction: undefined,
+            assignmentDecisionFor: undefined,
+          }))
+      );
+    }
   };
   const ackField = (key: string) => {
     touch();
@@ -254,6 +323,8 @@ export function ReviewSheet({
                 animalName: a.name,
                 probable: false,
                 acknowledged: true,
+                assignmentAction: undefined,
+                assignmentDecisionFor: undefined,
               }
             : r
         )
@@ -264,6 +335,26 @@ export function ReviewSheet({
     setRows(
       (rs) =>
         rs && rs.map((r, j) => (j === i ? { ...r, acknowledged: true } : r))
+    );
+  };
+  const chooseAssignmentAction = (i: number, action: "move" | "keep") => {
+    const row = rows?.[i];
+    if (!row) return;
+    const review = assignmentFor(row);
+    if (!review.needsDecision || !review.decisionKey) return;
+    touch();
+    setRows(
+      (rs) =>
+        rs &&
+        rs.map((r, j) =>
+          j === i
+            ? {
+                ...r,
+                assignmentAction: action,
+                assignmentDecisionFor: review.decisionKey ?? undefined,
+              }
+            : r
+        )
     );
   };
 
@@ -279,13 +370,15 @@ export function ReviewSheet({
     touch();
     setCadastroError(null);
     const guess = guessNewAnimal(rows[i].rawLabel);
-    setCadastro({ row: i, name: guess.name, tag: guess.tag });
+    setCadastro({ row: i, name: guess.name, tag: guess.tag, createConfirmed: false });
   };
 
   const saveCadastro = async () => {
     if (!cadastro || !cadastro.name.trim() || cadastroBusy) return;
     const name = cadastro.name.trim();
     const tag = cadastro.tag.trim();
+    if (cadastroDuplicate) return;
+    if (cadastroSuggestions.length > 0 && !cadastro.createConfirmed) return;
     setCadastroBusy(true);
     setCadastroError(null);
     const outcome = await dispatch({
@@ -321,7 +414,18 @@ export function ReviewSheet({
     const bindings = rows
       ? rows
           .filter((r) => r.animalId !== null && parseMilkLiters(r.value) !== null)
-          .map((r) => ({ animalId: r.animalId!, liters: parseMilkLiters(r.value)! }))
+          .map((r) => {
+            const review = assignmentFor(r);
+            return {
+              animalId: r.animalId!,
+              liters: parseMilkLiters(r.value)!,
+              ...(review.needsDecision &&
+              r.assignmentDecisionFor === review.decisionKey &&
+              r.assignmentAction
+                ? { assignmentAction: r.assignmentAction }
+                : {}),
+            };
+          })
           : undefined;
     const confirmed = await dispatch({
       type: "ConfirmAssistantProposal",
@@ -589,6 +693,9 @@ export function ReviewSheet({
                     {rows.map((r, i) => {
                       const edited = r.value !== r.original;
                       const bound = r.animalId !== null;
+                      const assignment = bound ? assignmentFor(r) : null;
+                      const needsAssignmentDecision = assignment?.needsDecision ?? false;
+                      const assignmentDecisionCurrent = hasCurrentAssignmentDecision(r);
                       const ok = rowOk(r);
                       return (
                         <div
@@ -657,6 +764,40 @@ export function ReviewSheet({
                               este Animal.
                             </p>
                           )}
+                          {bound && needsAssignmentDecision && assignment && (
+                            <div className="mt-3 rounded-xl border border-review-500/40 bg-review-100 px-3 py-3" role="alert">
+                              <div className="flex gap-2">
+                                <AlertTriangle size={16} className="mt-0.5 shrink-0 text-review-700" />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-review-700">Lotação diferente na data da medição</p>
+                                  <p className="mt-0.5 text-xs text-review-700">
+                                    {assignment.currentGroup
+                                      ? `${r.animalName} estava no ${assignment.currentGroup.name} em ${formatLong(reviewedDate)}.`
+                                      : `${r.animalName} não tem Lotação em ${formatLong(reviewedDate)}.`}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="mt-3 grid gap-2">
+                                <button
+                                  onClick={() => chooseAssignmentAction(i, "move")}
+                                  className={`min-h-[44px] rounded-xl border px-3 text-left text-sm font-semibold ${r.assignmentAction === "move" && assignmentDecisionCurrent ? "border-pasture-600 bg-pasture-100 text-pasture-800" : "border-review-500/50 bg-white text-review-700"}`}
+                                >
+                                  Mover para {resolvedGroup?.name} em {formatLong(reviewedDate)}
+                                </button>
+                                <button
+                                  onClick={() => chooseAssignmentAction(i, "keep")}
+                                  className={`min-h-[44px] rounded-xl border px-3 text-left text-sm font-semibold ${r.assignmentAction === "keep" && assignmentDecisionCurrent ? "border-pasture-600 bg-pasture-100 text-pasture-800" : "border-review-500/50 bg-white text-review-700"}`}
+                                >
+                                  {assignment.currentGroup
+                                    ? `Manter no ${assignment.currentGroup.name} e registrar só a Medição`
+                                    : "Manter sem Lote e registrar só a Medição"}
+                                </button>
+                              </div>
+                              {!assignmentDecisionCurrent && (
+                                <p className="mt-2 text-xs font-medium text-review-700">Escolha como tratar a Lotação para confirmar esta medição.</p>
+                              )}
+                            </div>
+                          )}
                           {!bound && (
                             <div className="mt-2">
                               <p className="text-xs text-review-700 mb-1.5">
@@ -713,6 +854,7 @@ export function ReviewSheet({
                                         setCadastro({
                                           ...cadastro,
                                           name: e.target.value,
+                                          createConfirmed: false,
                                         })
                                       }
                                     />
@@ -725,10 +867,39 @@ export function ReviewSheet({
                                         setCadastro({
                                           ...cadastro,
                                           tag: e.target.value,
+                                          createConfirmed: false,
                                         })
                                       }
                                     />
                                   </Field>
+                                  {(() => {
+                                    if (cadastroDuplicate) return (
+                                      <div className="rounded-xl border border-review-500/40 bg-review-100 p-3">
+                                        <p className="text-xs text-review-700">Já existe um Animal com esse nome ou brinco.</p>
+                                        <button onClick={() => bindRow(i, cadastroDuplicate)} className="mt-2 min-h-[44px] rounded-xl border border-pasture-500 bg-white px-3 text-sm font-semibold text-pasture-700">
+                                          Vincular a {cadastroDuplicate.name}{cadastroDuplicate.tag ? ` · ${cadastroDuplicate.tag}` : ""}
+                                        </button>
+                                      </div>
+                                    );
+                                    if (cadastroSuggestions.length === 0) return null;
+                                    return (
+                                      <div className="rounded-xl border border-review-500/40 bg-review-100 p-3">
+                                        <p className="text-xs text-review-700">Antes de cadastrar, confira estes Animais parecidos:</p>
+                                        <div className="mt-2 flex flex-wrap gap-1.5">
+                                          {cadastroSuggestions.map((suggestion) => (
+                                            <button key={suggestion.animal.id} onClick={() => bindRow(i, suggestion.animal)} className="min-h-[44px] rounded-full border border-review-500/50 bg-white px-3 text-sm font-medium text-review-700">
+                                              Vincular a {suggestion.animal.name}{suggestion.animal.tag ? ` · ${suggestion.animal.tag}` : ""}
+                                            </button>
+                                          ))}
+                                        </div>
+                                        {!cadastro.createConfirmed && (
+                                          <button onClick={() => setCadastro({ ...cadastro, createConfirmed: true })} className="mt-2 min-h-[44px] text-sm font-semibold text-review-700 underline underline-offset-2">
+                                            Cadastrar mesmo assim
+                                          </button>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                   {resolvedGroup && (
                                     <p className="text-xs text-ink-faint">
                                       Vai entrar no {resolvedGroup.name}.
@@ -757,7 +928,10 @@ export function ReviewSheet({
                                       variant="secondary"
                                       className="flex-1"
                                       disabled={
-                                        !cadastro.name.trim() || cadastroBusy
+                                        !cadastro.name.trim() ||
+                                        cadastroBusy ||
+                                        Boolean(cadastroDuplicate) ||
+                                        (cadastroSuggestions.length > 0 && !cadastro.createConfirmed)
                                       }
                                       onClick={saveCadastro}
                                     >
@@ -808,6 +982,27 @@ export function ReviewSheet({
                     <span>{c}</span>
                   </li>
                 ))}
+                {chosenMoves.map((row) => (
+                  <li key={`move-${row.animalId}`} className="flex gap-2 text-sm">
+                    <Check size={16} className="text-pasture-600 shrink-0 mt-0.5" />
+                    <span>
+                      Lotação de {row.animalName} movida para {resolvedGroup?.name} em {formatLong(reviewedDate)}.
+                    </span>
+                  </li>
+                ))}
+                {chosenKeeps.map((row) => {
+                  const currentGroup = assignmentFor(row).currentGroup;
+                  return (
+                    <li key={`keep-${row.animalId}`} className="flex gap-2 text-sm">
+                      <Check size={16} className="text-pasture-600 shrink-0 mt-0.5" />
+                      <span>
+                        Lotação de {row.animalName} {currentGroup
+                          ? `mantida no ${currentGroup.name}`
+                          : "mantida sem Lote"}; somente a Medição será registrada.
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
               {proposal.confirmedRecordIds.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-3">

@@ -45,7 +45,14 @@ A pessoa sempre sabe em qual estado está:
 5. **Matching de Animais:** rótulo não reconhecido (ex.: “Brinco 300”) oferece
    sugestões por semelhança (fuzzy, nome e brinco, tolerante a caixa/acentos)
    com vínculo em um toque, e cadastro rápido inline sem sair da Revisão. Linha
-   sem vínculo bloqueia a Confirmação.
+   sem vínculo bloqueia a Confirmação. Antes de cadastrar, nome ou brinco
+   repetido oferece o vínculo existente; candidato aproximado exige a escolha
+   consciente entre vincular e “Cadastrar mesmo assim”.
+6. **Lotação divergente:** em Controle leiteiro, se o Animal não estiver no
+   Lote do Controle na data, a linha âmbar explica a divergência e bloqueia a
+   Confirmação até a pessoa escolher “mover para este Lote” ou “manter a
+   Lotação e registrar só a Medição”. A consequência escolhida permanece
+   visível antes da Confirmação.
 
 ## Controle leiteiro
 

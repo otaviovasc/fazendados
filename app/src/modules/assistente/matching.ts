@@ -42,18 +42,18 @@ const digitsOf = (s: string) => (s.match(/\d+/g) ?? []).join("");
 
 /** Palavras que só identificam o tipo do rótulo, nunca um Animal. */
 const STOP_WORDS = new Set(["brinco", "vaca", "numero", "n"]);
+const MAX_FUZZY_WORDS = 8;
+const MAX_FUZZY_WORD_LENGTH = 40;
 
 /**
- * Distância de edição ≤ 1 entre palavras curtas (erro de digitação comum ao
- * transcrever do caderno: "mimoza" → "Mimosa"). Limitada a palavras curtas
- * para custo desprezível.
+ * Distância de edição limitada. O corte por tamanho e por linha mantém o
+ * matching barato mesmo quando a Fazenda possui muitos Animais.
  */
-function nearWord(a: string, b: string): boolean {
-  if (a === b) return true;
+function editDistanceAtMost(a: string, b: string, maxDistance: number): number | null {
+  if (Math.abs(a.length - b.length) > maxDistance) return null;
+
   const la = a.length;
   const lb = b.length;
-  if (Math.abs(la - lb) > 1 || la < 3 || lb < 3 || la > 12 || lb > 12) return false;
-  // Uma linha de Levenshtein com corte antecipado.
   let prev = Array.from({ length: lb + 1 }, (_, j) => j);
   for (let i = 1; i <= la; i++) {
     const cur = [i];
@@ -63,10 +63,24 @@ function nearWord(a: string, b: string): boolean {
       cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
       if (cur[j] < rowMin) rowMin = cur[j];
     }
-    if (rowMin > 1) return false;
+    if (rowMin > maxDistance) return null;
     prev = cur;
   }
-  return prev[lb] <= 1;
+  return prev[lb] <= maxDistance ? prev[lb] : null;
+}
+
+/**
+ * Aceita pequenos erros de transcrição sem aproximar nomes curtos demais.
+ * Em nomes com pelo menos 10 caracteres, dois erros ainda representam no
+ * máximo 20% do trecho menor ("Guillemina" → "Guilhermina").
+ */
+function fuzzyDistance(a: string, b: string): number | null {
+  const shortest = Math.min(a.length, b.length);
+  const longest = Math.max(a.length, b.length);
+  if (shortest < 3 || longest > MAX_FUZZY_WORD_LENGTH) return null;
+
+  const maxDistance = Math.min(2, Math.max(1, Math.floor(shortest / 5)));
+  return editDistanceAtMost(a, b, maxDistance);
 }
 
 interface Candidate {
@@ -120,9 +134,10 @@ export function matchAnimalLabel(rawLabel: string, animals: Animal[]): MatchResu
   const words = norm
     .split(" ")
     .filter((w) => w.length >= 3 && !/^\d+$/.test(w) && !STOP_WORDS.has(w));
+  const fuzzyWords = words.slice(0, MAX_FUZZY_WORDS);
   for (const a of active) {
     const an = normalizeLabel(a.name);
-    const nameWords = an.split(" ");
+    const nameWords = an.split(" ").slice(0, MAX_FUZZY_WORDS);
     const prefix = words.find(
       (w) => an.startsWith(w) || (w.length > an.length && w.startsWith(an))
     );
@@ -135,11 +150,19 @@ export function matchAnimalLabel(rawLabel: string, animals: Animal[]): MatchResu
       bump(a, 1, "nome", inside);
       continue;
     }
-    // Erro curto de digitação: palavra quase igual a uma palavra do nome.
-    const typo = words.find((w) => nameWords.some((nw) => nearWord(w, nw)));
-    if (typo) {
-      const closest = nameWords.find((nw) => nearWord(typo, nw)) ?? typo;
-      bump(a, 1, "nome", closest);
+    // Erro de digitação: tolera até dois caracteres apenas em nomes longos.
+    // A distância entra no score para que o candidato mais próximo venha antes.
+    let closest: { nameWord: string; distance: number } | null = null;
+    for (const word of fuzzyWords) {
+      for (const nameWord of nameWords) {
+        const distance = fuzzyDistance(word, nameWord);
+        if (distance !== null && (!closest || distance < closest.distance)) {
+          closest = { nameWord, distance };
+        }
+      }
+    }
+    if (closest) {
+      bump(a, closest.distance === 1 ? 2 : 1, "nome", closest.nameWord);
     }
   }
 

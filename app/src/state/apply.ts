@@ -40,6 +40,12 @@ function upsertById<T extends { id: string }>(list: T[], item: T): T[] {
   return next;
 }
 
+function previousDate(date: string) {
+  const value = new Date(`${date}T00:00:00.000Z`);
+  value.setUTCDate(value.getUTCDate() - 1);
+  return value.toISOString().slice(0, 10);
+}
+
 /** Mescla o resultado autoritativo pela chave natural (sessão, animal). */
 function mergeMeasurement(
   list: IndividualMilkMeasurement[],
@@ -169,7 +175,9 @@ export function applyCommandResult(s: FarmState, a: Action, result: unknown): Fa
       next = {
         ...next,
         assignments: next.assignments.map((x) =>
-          x.id === r.closedAssignmentId ? { ...x, end: a.date } : x,
+          x.id === r.closedAssignmentId
+            ? { ...x, end: previousDate(a.date) }
+            : x,
         ),
       };
     }
