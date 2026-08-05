@@ -317,6 +317,7 @@ function toProposal(intent: Intent, context: AssistantContext): AssistantProposa
 function messageContent(raw: unknown): string {
   const content = (raw as { choices?: Array<{ message?: { content?: unknown } }> } | null)?.choices?.[0]?.message?.content;
   if (typeof content === 'string') return content;
+  if (content && typeof content === 'object' && typeof (content as { text?: unknown }).text === 'string') return (content as { text: string }).text;
   if (!Array.isArray(content)) return '';
   return content
     .filter((part): part is { text: string } => Boolean(part && typeof part === 'object' && typeof (part as { text?: unknown }).text === 'string'))
@@ -325,7 +326,96 @@ function messageContent(raw: unknown): string {
 }
 
 function stripMarkdownJson(value: string): string {
-  return value.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+  const stripped = value.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+  const start = stripped.indexOf('{');
+  const end = stripped.lastIndexOf('}');
+  return start >= 0 && end > start ? stripped.slice(start, end + 1) : stripped;
+}
+
+function nullableModelNumber(value: unknown): unknown {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return Number.isFinite(value) && value >= 0 ? value : null;
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const compact = value.trim().replace(/\s/g, '');
+  const normalized = compact.includes(',') ? compact.replace(/\./g, '').replace(',', '.') : compact;
+  const number = Number(normalized);
+  return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function modelConfidence(value: unknown): 'HIGH' | 'MEDIUM' | 'LOW' {
+  const normalized = typeof value === 'string' ? value.trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') : '';
+  if (normalized === 'HIGH' || normalized === 'ALTA') return 'HIGH';
+  if (normalized === 'MEDIUM' || normalized === 'MEDIA') return 'MEDIUM';
+  return 'LOW';
+}
+
+function modelDate(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return /^\d{4}-\d{2}-\d{2}$/.test(value)
+      ? { relative: null, iso: value, rawText: value }
+      : { relative: value, iso: null, rawText: value };
+  }
+  if (!value || typeof value !== 'object') return { relative: null, iso: null, rawText: '' };
+  const date = value as Record<string, unknown>;
+  return {
+    relative: typeof date.relative === 'string' ? date.relative : null,
+    iso: typeof date.iso === 'string' ? date.iso : null,
+    rawText: typeof date.rawText === 'string' ? date.rawText : '',
+  };
+}
+
+function normalizeModelIntent(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value;
+  const intent = value as Record<string, unknown>;
+  const common = {
+    ...intent,
+    date: modelDate(intent.date),
+    confidence: modelConfidence(intent.confidence),
+    notes: typeof intent.notes === 'string' ? intent.notes : null,
+  };
+
+  if (intent.type === 'individual_milk_session') {
+    return {
+      ...common,
+      scopeLabel: typeof intent.scopeLabel === 'string' ? intent.scopeLabel : null,
+      period: typeof intent.period === 'string'
+        ? ({ MORNING: 'MORNING', AFTERNOON: 'AFTERNOON', MANHA: 'MORNING', TARDE: 'AFTERNOON' } as Record<string, string>)[intent.period.trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')] ?? null
+        : null,
+      measurements: Array.isArray(intent.measurements) ? intent.measurements.map((item) => {
+        const measurement = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+        return {
+          ...measurement,
+          morningLiters: nullableModelNumber(measurement.morningLiters),
+          afternoonLiters: nullableModelNumber(measurement.afternoonLiters),
+          totalLiters: nullableModelNumber(measurement.totalLiters),
+          rawValueText: typeof measurement.rawValueText === 'string' ? measurement.rawValueText : '',
+          confidence: modelConfidence(measurement.confidence),
+          notes: typeof measurement.notes === 'string' ? measurement.notes : null,
+        };
+      }) : [],
+    };
+  }
+
+  if (intent.type === 'daily_milk_total') {
+    return { ...common, scopeLabel: typeof intent.scopeLabel === 'string' ? intent.scopeLabel : null, morningLiters: nullableModelNumber(intent.morningLiters), afternoonLiters: nullableModelNumber(intent.afternoonLiters), rawValueText: typeof intent.rawValueText === 'string' ? intent.rawValueText : '' };
+  }
+  if (intent.type === 'milk_collection') {
+    return { ...common, liters: nullableModelNumber(intent.liters), time: typeof intent.time === 'string' ? intent.time : null, sourceLabel: typeof intent.sourceLabel === 'string' ? intent.sourceLabel : null, rawValueText: typeof intent.rawValueText === 'string' ? intent.rawValueText : '' };
+  }
+  if (intent.type === 'revenue' || intent.type === 'purchase') {
+    return { ...common, categoryLabel: typeof intent.categoryLabel === 'string' ? intent.categoryLabel : null, description: typeof intent.description === 'string' ? intent.description : '', amount: nullableModelNumber(intent.amount), [intent.type === 'revenue' ? 'received' : 'paid']: typeof (intent.type === 'revenue' ? intent.received : intent.paid) === 'boolean' ? (intent.type === 'revenue' ? intent.received : intent.paid) : null, dueDate: intent.dueDate === null || intent.dueDate === undefined ? null : modelDate(intent.dueDate) };
+  }
+  if (intent.type === 'feeding_event') {
+    return { ...common, contextLabel: typeof intent.contextLabel === 'string' ? intent.contextLabel : null, scopeLabel: typeof intent.scopeLabel === 'string' ? intent.scopeLabel : null, lines: Array.isArray(intent.lines) ? intent.lines.map((item) => { const line = item && typeof item === 'object' ? item as Record<string, unknown> : {}; return { ...line, itemLabel: typeof line.itemLabel === 'string' ? line.itemLabel : '', quantity: nullableModelNumber(line.quantity), unitLabel: typeof line.unitLabel === 'string' ? line.unitLabel : null, rawValueText: typeof line.rawValueText === 'string' ? line.rawValueText : '' }; }) : [] };
+  }
+  if (intent.type === 'unknown') return { type: 'unknown', reason: typeof intent.reason === 'string' ? intent.reason : 'Captura não reconhecida.' };
+  return common;
+}
+
+function normalizeModelOutput(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value;
+  const output = value as Record<string, unknown>;
+  return { ...output, intents: Array.isArray(output.intents) ? output.intents.map(normalizeModelIntent) : [] };
 }
 
 function parseInterpretation(raw: unknown): { success: true; data: z.infer<typeof interpretationSchema> } | { success: false } {
@@ -333,7 +423,7 @@ function parseInterpretation(raw: unknown): { success: true; data: z.infer<typeo
   if (!content.trim()) return { success: false };
   try {
     const parsed: unknown = JSON.parse(stripMarkdownJson(content));
-    const result = interpretationSchema.safeParse(parsed);
+    const result = interpretationSchema.safeParse(normalizeModelOutput(parsed));
     return result.success ? { success: true, data: result.data } : { success: false };
   } catch {
     return { success: false };
