@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { dateKeyInSaoPaulo } from '../lib/dates.js';
 import { env } from './env.js';
 import { ApiError } from './http.js';
 import { errorType, logger } from './logger.js';
@@ -140,14 +141,6 @@ const OUTPUT_CONTRACT = `Responda SOMENTE com JSON válido, sem Markdown, no for
 Cada intent deve conter explicitamente o campo type. Intents diferentes de unknown também devem conter confidence e notes no nível da intent.
 Use null quando um campo opcional não foi informado. Não use campos extras.`;
 
-function dateKeyInSaoPaulo(date = new Date()): string {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).formatToParts(date);
-  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
-  return `${get('year')}-${get('month')}-${get('day')}`;
-}
-
 function addDays(iso: string, days: number): string {
   const date = new Date(`${iso}T12:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
@@ -233,17 +226,23 @@ function toProposal(intent: Intent, context: AssistantContext): AssistantProposa
     else if (!knownGroup) issues.push(`Lote “${intent.scopeLabel}” não encontrado — escolha na Revisão.`);
     if (!intent.period) issues.push('Turno não informado — escolha manhã ou tarde na Revisão.');
     const rows: string[] = [];
+    let usableMeasurementCount = 0;
     for (const measurement of intent.measurements) {
       const liters = intent.period === 'AFTERNOON'
         ? measurement.afternoonLiters ?? measurement.totalLiters
         : measurement.morningLiters ?? measurement.totalLiters;
       if (liters === null) {
         issues.push(`Sem volume para “${measurement.animalLabel}” — confira na Revisão.`);
+        // Preserve a linha sem volume so the operator can discard it or
+        // complete it during Revisão; dropping it here makes the issue
+        // impossible to resolve from the UI.
+        rows.push(measurement.animalLabel);
         continue;
       }
+      usableMeasurementCount += 1;
       rows.push(`${measurement.animalLabel} ${numberText(liters)}`);
     }
-    if (!rows.length) issues.push('Nenhuma medição utilizável foi encontrada.');
+    if (!usableMeasurementCount) issues.push('Nenhuma medição utilizável foi encontrada.');
     if (intent.notes) issues.push(intent.notes);
     const shift = intent.period === 'MORNING' ? 'Manhã' : intent.period === 'AFTERNOON' ? 'Tarde' : '';
     return {

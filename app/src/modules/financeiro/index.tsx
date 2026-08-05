@@ -16,9 +16,7 @@ import {
   useUnsavedGuard,
 } from "../../components/ui";
 import { formatCents, parseDecimal } from "../../lib/format";
-import { formatDay, formatLong, formatRelativeDay } from "../../lib/dates";
-
-const monthFmt = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" });
+import { formatDay, formatLong, formatMonth, formatRelativeDay } from "../../lib/dates";
 
 export default function FinanceiroPage() {
   const { state } = useFarm();
@@ -26,7 +24,7 @@ export default function FinanceiroPage() {
   const [settling, setSettling] = useState<FinancialEntry | null>(null);
 
   const monthKey = today().slice(0, 7); // "2026-08"
-  const monthLabel = monthFmt.format(new Date(today() + "T12:00:00"));
+  const monthLabel = formatMonth(today());
 
   const settledThisMonth = state.financialEntries.filter(
     (e) => e.settledAt !== null && e.settledAt.startsWith(monthKey)

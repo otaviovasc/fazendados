@@ -25,6 +25,7 @@ import {
   useFarm,
 } from "../../state/store";
 import {
+  dateKeyInSaoPaulo,
   formatDay,
   formatLong,
   formatRelativeDay,
@@ -350,7 +351,7 @@ export default function InicioPage() {
             <div key={ev.id} className="px-4 py-3 flex flex-col gap-1.5">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-medium text-ink-faint">
-                  {formatRelativeDay(ev.at.slice(0, 10))} ·{" "}
+                  {formatRelativeDay(dateKeyInSaoPaulo(ev.at))} ·{" "}
                   {ACTION_LABEL[ev.action] ?? ev.action}
                 </span>
                 <Chip tone={ev.origin === "assistente" ? "captura" : "neutro"}>

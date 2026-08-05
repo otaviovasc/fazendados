@@ -8,6 +8,8 @@ import {
   Hash,
   Layers,
   Quote,
+  RotateCcw,
+  Trash2,
   UserPlus,
   Wallet,
   X,
@@ -66,6 +68,8 @@ interface RowReview {
   probable: boolean; // vínculo provável: exige um toque para confirmar
   suggestions: Suggestion[];
   acknowledged: boolean;
+  /** Linha removida da confirmação sem alterar a Captura original. */
+  discarded: boolean;
   /** Escolha humana exigida quando a Lotação não bate com o Lote do Controle. */
   assignmentAction?: "move" | "keep";
   /** Evita reutilizar uma escolha após trocar Animal, Lote ou data. */
@@ -105,6 +109,7 @@ function initRows(p: AssistantProposal, animals: Animal[]): RowReview[] | null {
         suggestions: match.suggestions,
         // Reconhecimento exato nasce conferido; provável/não reconhecido, não.
         acknowledged: match.status === "exata",
+        discarded: false,
       };
     });
 }
@@ -245,27 +250,31 @@ export function ReviewSheet({
   };
 
   const rowOk = (r: RowReview) =>
-    r.animalId !== null &&
-    (r.acknowledged || r.value !== r.original) &&
-    parseMilkLiters(r.value) !== null &&
-    hasCurrentAssignmentDecision(r);
+    r.discarded ||
+    (r.animalId !== null &&
+      (r.acknowledged || r.value !== r.original) &&
+      parseMilkLiters(r.value) !== null &&
+      hasCurrentAssignmentDecision(r));
 
   const fieldUnits = fields.filter((field) => field.key !== "rows");
+  const activeRows = (rows ?? []).filter((row) => !row.discarded);
   const progress = {
-    total: fieldUnits.length + (rows ?? []).length,
+    total: fieldUnits.length + activeRows.length,
     done:
       fieldUnits.filter(
         (field) => field.acknowledged || field.value !== field.original,
-      ).length + (rows ?? []).filter(rowOk).length,
+      ).length + activeRows.filter(rowOk).length,
   };
 
   if (!proposal) return null;
 
   const groupOk = proposal.kind !== "controle_leiteiro" || Boolean(resolvedGroup);
-  const allChecked = progress.done === progress.total && groupOk;
+  const hasMeasurementToConfirm = proposal.kind !== "controle_leiteiro" || activeRows.length > 0;
+  const allChecked = progress.done === progress.total && groupOk && hasMeasurementToConfirm;
   const chosenMoves = (rows ?? []).filter((row) => {
     const review = assignmentFor(row);
     return (
+      !row.discarded &&
       row.assignmentAction === "move" &&
       row.assignmentDecisionFor === review.decisionKey
     );
@@ -273,6 +282,7 @@ export function ReviewSheet({
   const chosenKeeps = (rows ?? []).filter((row) => {
     const review = assignmentFor(row);
     return (
+      !row.discarded &&
       review.needsDecision &&
       row.assignmentAction === "keep" &&
       row.assignmentDecisionFor === review.decisionKey
@@ -335,6 +345,13 @@ export function ReviewSheet({
     setRows(
       (rs) =>
         rs && rs.map((r, j) => (j === i ? { ...r, acknowledged: true } : r))
+    );
+  };
+  const setRowDiscarded = (i: number, discarded: boolean) => {
+    touch();
+    setRows(
+      (rs) =>
+        rs && rs.map((row, j) => (j === i ? { ...row, discarded } : row)),
     );
   };
   const chooseAssignmentAction = (i: number, action: "move" | "keep") => {
@@ -408,12 +425,17 @@ export function ReviewSheet({
       confidence: f.confidence,
       value:
         f.key === "rows" && rows
-          ? rows.map((r) => `${r.rawLabel} ${r.value}`).join(" · ")
+          ? activeRows.map((r) => `${r.rawLabel} ${r.value}`).join(" · ")
           : f.value,
     }));
     const bindings = rows
       ? rows
-          .filter((r) => r.animalId !== null && parseMilkLiters(r.value) !== null)
+          .filter(
+            (r) =>
+              !r.discarded &&
+              r.animalId !== null &&
+              parseMilkLiters(r.value) !== null,
+          )
           .map((r) => {
             const review = assignmentFor(r);
             return {
@@ -471,7 +493,7 @@ export function ReviewSheet({
     contextItems.push({
       icon: Beef,
       label: "Medições na lista",
-      value: `${rows.length}`,
+      value: `${activeRows.length}`,
     });
   if (get("kind"))
     contextItems.push({ icon: Wallet, label: "Tipo", value: get("kind") });
@@ -697,11 +719,15 @@ export function ReviewSheet({
                       const needsAssignmentDecision = assignment?.needsDecision ?? false;
                       const assignmentDecisionCurrent = hasCurrentAssignmentDecision(r);
                       const ok = rowOk(r);
+                      const volumeInvalid = parseMilkLiters(r.value) === null;
+                      const canDiscard = volumeInvalid || !bound || r.probable;
                       return (
                         <div
                           key={`${r.rawLabel}-${i}`}
                           className={`rounded-xl border p-3 ${
-                            ok
+                            r.discarded
+                              ? "border-black/10 bg-ink/[0.03]"
+                              : ok
                               ? "border-black/5"
                               : "border-review-500/40 bg-review-100/50"
                           }`}
@@ -709,47 +735,80 @@ export function ReviewSheet({
                           <div className="flex items-center gap-2">
                             <span
                               className={`w-2 h-2 rounded-full shrink-0 ${
-                                ok ? "bg-pasture-500" : "bg-review-500"
+                                r.discarded
+                                  ? "bg-ink/30"
+                                  : ok
+                                  ? "bg-pasture-500"
+                                  : "bg-review-500"
                               }`}
                             />
                             <div className="min-w-0 flex-1">
                               <p className="text-sm font-medium truncate">
                                 {bound ? r.animalName : `“${r.rawLabel}”`}
                               </p>
-                              {bound && (
+                              {r.discarded ? (
+                                <p className="text-xs text-ink-faint">
+                                  Descartada — não será registrada
+                                </p>
+                              ) : bound ? (
                                 <p className="text-xs text-ink-faint truncate">
                                   “{r.rawLabel}” na captura
                                 </p>
-                              )}
+                              ) : null}
                             </div>
-                            <input
-                              className={`${inputCls} !w-20 text-right`}
-                              inputMode="decimal"
-                              value={r.value}
-                              onChange={(e) => updateRow(i, e.target.value)}
-                              aria-label={`Medição de ${r.rawLabel}`}
-                            />
-                            <span className="text-xs text-ink-faint">L</span>
-                            {ok ? (
-                              <span className="inline-flex items-center justify-center text-pasture-700 min-h-[36px] min-w-[36px]">
-                                <Check size={15} />
-                              </span>
-                            ) : bound ? (
+                            {!r.discarded && (
+                              <>
+                                <input
+                                  className={`${inputCls} !w-20 text-right`}
+                                  inputMode="decimal"
+                                  value={r.value}
+                                  onChange={(e) => updateRow(i, e.target.value)}
+                                  aria-label={`Medição de ${r.rawLabel}`}
+                                />
+                                <span className="text-xs text-ink-faint">L</span>
+                                {ok ? (
+                                  <span className="inline-flex items-center justify-center text-pasture-700 min-h-[36px] min-w-[36px]">
+                                    <Check size={15} />
+                                  </span>
+                                ) : bound ? (
+                                  <button
+                                    onClick={() => ackRow(i)}
+                                    aria-label={`Confirmar vínculo de ${r.rawLabel} com ${r.animalName}`}
+                                    className="inline-flex items-center gap-1 rounded-full border border-pasture-500 text-pasture-700 px-3 min-h-[44px] text-xs font-semibold"
+                                  >
+                                    <Check size={13} /> É {r.animalName}
+                                  </button>
+                                ) : null}
+                              </>
+                            )}
+                            {r.discarded ? (
                               <button
-                                onClick={() => ackRow(i)}
-                                aria-label={`Confirmar vínculo de ${r.rawLabel} com ${r.animalName}`}
-                                className="inline-flex items-center gap-1 rounded-full border border-pasture-500 text-pasture-700 px-3 min-h-[44px] text-xs font-semibold"
+                                type="button"
+                                onClick={() => setRowDiscarded(i, false)}
+                                aria-label={`Restaurar ${r.rawLabel}`}
+                                title="Restaurar linha"
+                                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-ink-soft hover:bg-ink/5"
                               >
-                                <Check size={13} /> É {r.animalName}
+                                <RotateCcw size={17} />
+                              </button>
+                            ) : canDiscard ? (
+                              <button
+                                type="button"
+                                onClick={() => setRowDiscarded(i, true)}
+                                aria-label={`Descartar ${r.rawLabel} sem registrar medição`}
+                                title="Descartar linha"
+                                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-ink-soft hover:bg-danger-100 hover:text-danger-600"
+                              >
+                                <Trash2 size={17} />
                               </button>
                             ) : null}
                           </div>
-                          {r.value.trim() && parseMilkLiters(r.value) === null && (
+                          {!r.discarded && r.value.trim() && parseMilkLiters(r.value) === null && (
                             <p className="text-xs text-review-700 mt-1.5" role="alert">
                               Informe um volume entre 0 e 100 L, usando apenas um número, como 12,5 ou 12.5.
                             </p>
                           )}
-                          {edited && (
+                          {!r.discarded && edited && (
                             <p className="text-xs text-ink-faint mt-1.5">
                               <span className="rounded-full bg-ink/5 text-ink-soft px-2 py-0.5 text-[11px] font-medium mr-1.5">
                                 editado por você
@@ -758,13 +817,13 @@ export function ReviewSheet({
                               <span className="line-through">{r.original}</span>
                             </p>
                           )}
-                          {bound && r.probable && !ok && (
+                          {!r.discarded && bound && r.probable && !ok && (
                             <p className="text-xs text-review-700 mt-1.5">
                               Vínculo provável — toque para confirmar que é
                               este Animal.
                             </p>
                           )}
-                          {bound && needsAssignmentDecision && assignment && (
+                          {!r.discarded && bound && needsAssignmentDecision && assignment && (
                             <div className="mt-3 rounded-xl border border-review-500/40 bg-review-100 px-3 py-3" role="alert">
                               <div className="flex gap-2">
                                 <AlertTriangle size={16} className="mt-0.5 shrink-0 text-review-700" />
@@ -798,7 +857,7 @@ export function ReviewSheet({
                               )}
                             </div>
                           )}
-                          {!bound && (
+                          {!r.discarded && !bound && (
                             <div className="mt-2">
                               <p className="text-xs text-review-700 mb-1.5">
                                 {r.suggestions.length > 0
@@ -1063,7 +1122,9 @@ export function ReviewSheet({
                 <span className="tnum font-semibold text-ink-soft">
                   {progress.done} de {progress.total} conferidos
                 </span>
-                {allChecked
+                {!hasMeasurementToConfirm
+                  ? " — descarte a Proposta inteira ou restaure uma medição."
+                  : allChecked
                   ? " — pode confirmar."
                   : " — confira cada campo e vincule cada medição."}
                 {pendingCount > 1 &&

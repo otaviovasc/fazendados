@@ -40,7 +40,7 @@ export type Action =
       // Correção data-only (D-026): edita fatos, nunca entidades de cadastro;
       // motivo obrigatório e antes/depois gravados na auditoria pelo servidor.
       type: "CorrectOperationalFact";
-      entityType: "producao_diaria" | "coleta";
+      entityType: "producao_diaria" | "coleta" | "medicao_individual";
       entityId: string;
       newLiters: number;
       reason: string;

@@ -1,20 +1,58 @@
 import type { ISODate } from "../domain/types.js";
 
-export function toISODate(d: Date): ISODate {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+export const BRAZIL_TIME_ZONE = "America/Sao_Paulo";
+
+type DateTimeInput = Date | string;
+
+function asDate(value: DateTimeInput): Date {
+  return value instanceof Date ? value : new Date(value);
 }
 
-/** Hoje operacional (data real do dispositivo). */
+function datePart(parts: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPartTypes): string {
+  return parts.find((part) => part.type === type)?.value ?? "";
+}
+
+const saoPauloDateParts = new Intl.DateTimeFormat("en-US", {
+  timeZone: BRAZIL_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+const saoPauloTime = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: BRAZIL_TIME_ZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+/** Converte um instante ISO (inclusive UTC à meia-noite) para a data civil brasileira. */
+export function dateKeyInSaoPaulo(value: DateTimeInput = new Date()): ISODate {
+  const parts = saoPauloDateParts.formatToParts(asDate(value));
+  return `${datePart(parts, "year")}-${datePart(parts, "month")}-${datePart(parts, "day")}`;
+}
+
+/** Horário de um instante na Fazenda, sem depender do fuso do dispositivo. */
+export function timeInSaoPaulo(value: DateTimeInput): string {
+  return saoPauloTime.format(asDate(value));
+}
+
+function civilDateValue(iso: ISODate): Date {
+  // Meio-dia UTC mantém a data civil ao formatar em São Paulo e em fusos próximos.
+  return new Date(`${iso}T12:00:00.000Z`);
+}
+
+export function toISODate(d: Date): ISODate {
+  return dateKeyInSaoPaulo(d);
+}
+
+/** Hoje operacional no fuso da Fazenda. */
 export function today(): ISODate {
-  return toISODate(new Date());
+  return dateKeyInSaoPaulo(new Date());
 }
 
 export function addDays(iso: ISODate, delta: number): ISODate {
-  const d = new Date(iso + "T12:00:00");
-  d.setDate(d.getDate() + delta);
+  const d = civilDateValue(iso);
+  d.setUTCDate(d.getUTCDate() + delta);
   return toISODate(d);
 }
 
@@ -24,24 +62,41 @@ export function lastNDays(n: number): ISODate[] {
   return out;
 }
 
-const fmtDay = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" });
+const fmtDay = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: BRAZIL_TIME_ZONE,
+  day: "2-digit",
+  month: "2-digit",
+});
 const fmtLong = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: BRAZIL_TIME_ZONE,
   day: "2-digit",
   month: "short",
   year: "numeric",
 });
-const fmtWeekday = new Intl.DateTimeFormat("pt-BR", { weekday: "short" });
+const fmtWeekday = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: BRAZIL_TIME_ZONE,
+  weekday: "short",
+});
+const fmtMonth = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: BRAZIL_TIME_ZONE,
+  month: "long",
+  year: "numeric",
+});
 
 export function formatDay(iso: ISODate): string {
-  return fmtDay.format(new Date(iso + "T12:00:00"));
+  return fmtDay.format(civilDateValue(iso));
 }
 
 export function formatLong(iso: ISODate): string {
-  return fmtLong.format(new Date(iso + "T12:00:00"));
+  return fmtLong.format(civilDateValue(iso));
 }
 
 export function formatWeekday(iso: ISODate): string {
-  return fmtWeekday.format(new Date(iso + "T12:00:00")).replace(".", "");
+  return fmtWeekday.format(civilDateValue(iso)).replace(".", "");
+}
+
+export function formatMonth(iso: ISODate): string {
+  return fmtMonth.format(civilDateValue(iso));
 }
 
 /** "hoje", "ontem" ou data curta. */

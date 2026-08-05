@@ -2,7 +2,7 @@ import { Info } from "lucide-react";
 import { productionFor, sessionsOnDate, useFarm } from "../../state/store";
 import { AbsentValue, Card, SectionTitle } from "../../components/ui";
 import { formatLiters } from "../../lib/format";
-import { formatLong, formatRelativeDay, formatWeekday, lastNDays } from "../../lib/dates";
+import { dateKeyInSaoPaulo, formatLong, formatRelativeDay, formatWeekday, lastNDays } from "../../lib/dates";
 
 function SourceValue({
   label,
@@ -135,7 +135,7 @@ export default function CompararTab() {
               <div className="flex items-start justify-between gap-3">
                 <p className="text-sm font-medium">{c.description}</p>
                 <p className="text-xs text-ink-faint shrink-0">
-                  {formatLong(c.at.slice(0, 10))}
+                  {formatLong(dateKeyInSaoPaulo(c.at))}
                 </p>
               </div>
               {c.before && c.after && (

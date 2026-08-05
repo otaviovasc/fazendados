@@ -258,7 +258,7 @@ test('rejeita volume OCR malformado em vez de concatenar números', async () => 
     });
 
     assert.equal(proposal.kind, 'controle_leiteiro');
-    assert.equal(proposal.fields.find((field) => field.key === 'rows')?.value, '');
+    assert.equal(proposal.fields.find((field) => field.key === 'rows')?.value, 'Vaca 101');
     assert.match(proposal.issues.join('\n'), /Sem volume/);
   } finally {
     globalThis.fetch = originalFetch;
@@ -398,6 +398,10 @@ function createMemoryTx(options: {
                     state.sessions = state.sessions.map((session) => ({ ...session, ...value }));
                     return state.sessions;
                   }
+                  if (table === individualMilkMeasurements) {
+                    state.measurements = state.measurements.map((measurement) => ({ ...measurement, ...value }));
+                    return state.measurements;
+                  }
                   if (table === animalGroupAssignments) {
                     state.assignments = state.assignments.map((assignment) => ({ ...assignment, ...value }));
                     return state.assignments;
@@ -435,6 +439,30 @@ test('confirmação rejeita lançamento financeiro sem natureza explícita', asy
     (error: unknown) => error instanceof ApiError && error.code === 'INVALID_PROPOSAL',
   );
   assert.equal(tx.state.financialEntries.length, 0);
+});
+
+test('corrige Medição individual concluída com motivo e auditoria', async () => {
+  const tx = createMemoryTx({
+    proposal: proposal('coleta', []),
+    sessions: [{ id: 'session1', farmId: 'farm1', date: '2026-08-04', groupId: 'group1', shift: 'manha', status: 'concluido', origin: 'assistente' }],
+    measurements: [{ id: 'measurement1', sessionId: 'session1', animalId: 'animal1', liters: 7.5 }],
+  });
+
+  const result = await executeCommand(tx, auth, {
+    type: 'CorrectOperationalFact',
+    entityType: 'medicao_individual',
+    entityId: 'measurement1',
+    newLiters: 8,
+    description: 'Correção na medição individual de Mimosa',
+    before: '7,5 L',
+    after: '8,0 L',
+    reason: 'Conferi a anotação do caderno',
+  } satisfies CommandAction) as { measurement: { liters: number } };
+
+  assert.equal(result.measurement.liters, 8);
+  assert.equal(tx.state.measurements[0].liters, 8);
+  assert.equal(tx.state.audits[0].action, 'correcao');
+  assert.equal(tx.state.audits[0].entityType, 'medicao_individual');
 });
 
 test('confirmação de controle leiteiro rejeita medição existente sem correção explícita', async () => {

@@ -4,7 +4,6 @@ import {
   Camera,
   CheckCircle2,
   ImagePlus,
-  Hash,
   Inbox,
   LoaderCircle,
   Send,
@@ -31,7 +30,17 @@ import {
   SectionTitle,
 } from "../../components/ui";
 import { ReviewSheet } from "./ReviewSheet";
-import { captureAttachmentUrl, captureImageReferences, KIND_LABEL, formatWhen } from "./helpers";
+import { CorrectSheet, type CorrectionTarget } from "../leite/CorrectSheet";
+import {
+  captureAttachmentUrl,
+  captureImageReferences,
+  confirmationAt,
+  confirmedHistorySummary,
+  KIND_LABEL,
+  formatWhen,
+  sortAssistantHistory,
+} from "./helpers";
+import { useNavigate } from "react-router-dom";
 
 interface Toast {
   message: string;
@@ -39,6 +48,7 @@ interface Toast {
 
 export default function AssistentePage() {
   const { state, syncAssistantInterpretation } = useFarm();
+  const navigate = useNavigate();
   const [text, setText] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -49,11 +59,12 @@ export default function AssistentePage() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [interpreting, setInterpreting] = useState(false);
   const [interpretError, setInterpretError] = useState<string | null>(null);
+  const [correctionTarget, setCorrectionTarget] = useState<CorrectionTarget | null>(null);
   const cameraInput = useRef<HTMLInputElement>(null);
   const galleryInput = useRef<HTMLInputElement>(null);
 
   const pending = pendingProposals(state);
-  const history = state.proposals.filter((p) => p.status !== "pendente");
+  const history = sortAssistantHistory(state, state.proposals);
 
   const submit = async () => {
     const t = text.trim();
@@ -340,6 +351,11 @@ export default function AssistentePage() {
                 const confirmed = p.status === "confirmada";
                 const cap = captureOf(state, p.captureId);
                 const photos = cap ? captureImageReferences(cap) : [];
+                const summary = confirmed ? confirmedHistorySummary(state, p) : null;
+                const confirmedAt = confirmed ? confirmationAt(state, p.id) : undefined;
+                const controlPath = summary?.control?.path;
+                const production = summary?.production;
+                const collection = summary?.collection;
                 return (
                   <Card
                     key={p.id}
@@ -358,20 +374,20 @@ export default function AssistentePage() {
                         confirmed ? "" : "text-ink-soft"
                       }`}
                     >
-                      {p.title}
+                      {summary?.title ?? p.title}
                     </p>
-                    {cap && photos.map((id) => <a key={id} href={captureAttachmentUrl(cap.id, id)} target="_blank" rel="noreferrer" className="inline-block text-xs text-pasture-700 underline underline-offset-2 mt-1">Abrir foto original</a>)}
-                    {confirmed && p.confirmedRecordIds.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {p.confirmedRecordIds.map((id) => (
-                          <span
-                            key={id}
-                            className="inline-flex items-center gap-1 text-xs text-pasture-700 underline underline-offset-2"
-                          >
-                            <Hash size={11} />
-                            {id}
+                    {summary && <p className="text-sm text-ink-soft mt-1">{summary.detail}</p>}
+                    {cap && (
+                      <div className="flex items-center gap-3 flex-wrap mt-2">
+                        {photos.map((id) => <a key={id} href={captureAttachmentUrl(cap.id, id)} target="_blank" rel="noreferrer" className="text-xs text-pasture-700 underline underline-offset-2">Abrir foto original</a>)}
+                        <span className="text-xs text-ink-faint">
+                          Capturada {formatWhen(cap.createdAt)}
+                        </span>
+                        {confirmedAt && (
+                          <span className="text-xs text-ink-faint">
+                            Confirmada {formatWhen(confirmedAt)}
                           </span>
-                        ))}
+                        )}
                       </div>
                     )}
                     {!confirmed && (
@@ -380,6 +396,34 @@ export default function AssistentePage() {
                           ? `Motivo: ${p.dismissReason}`
                           : "Descartada sem motivo informado."}
                       </p>
+                    )}
+                    {confirmed && summary && (
+                      <div className="flex items-center justify-end gap-2 mt-3">
+                        {controlPath && (
+                          <Button
+                            variant="secondary"
+                            onClick={() => navigate(controlPath)}
+                          >
+                            Abrir controle do dia
+                          </Button>
+                        )}
+                        {production && (
+                          <Button
+                            variant="secondary"
+                            onClick={() => setCorrectionTarget({ kind: "producao", rec: production })}
+                          >
+                            Corrigir
+                          </Button>
+                        )}
+                        {collection && (
+                          <Button
+                            variant="secondary"
+                            onClick={() => setCorrectionTarget({ kind: "coleta", rec: collection })}
+                          >
+                            Corrigir
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </Card>
                 );
@@ -396,6 +440,14 @@ export default function AssistentePage() {
           proposalId={reviewId}
           onClose={() => setReviewId(null)}
           onConfirmed={handleConfirmed}
+        />
+      )}
+
+      {correctionTarget && (
+        <CorrectSheet
+          key={correctionTarget.rec.id}
+          target={correctionTarget}
+          onClose={() => setCorrectionTarget(null)}
         />
       )}
 

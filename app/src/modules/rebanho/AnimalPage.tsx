@@ -29,7 +29,7 @@ import {
   useUnsavedGuard,
 } from "../../components/ui";
 import { formatLiters } from "../../lib/format";
-import { formatLong } from "../../lib/dates";
+import { dateKeyInSaoPaulo, formatLong } from "../../lib/dates";
 
 export default function AnimalPage() {
   const { animalId } = useParams();
@@ -639,7 +639,7 @@ function LinhaDoTempo({ animalId }: { animalId: string }) {
     for (const ev of state.audit.filter(
       (e) => e.entityType === "animal" && e.entityId === animalId
     )) {
-      const date = ev.at.slice(0, 10);
+      const date = dateKeyInSaoPaulo(ev.at);
       out.push({
         key: ev.id,
         date,

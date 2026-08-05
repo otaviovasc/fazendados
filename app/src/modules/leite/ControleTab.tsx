@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -13,10 +15,12 @@ import {
   Card,
   Chip,
   EmptyState,
+  Field,
   Sheet,
   SuccessNotice,
   UnsavedFooter,
   useUnsavedGuard,
+  inputCls,
 } from "../../components/ui";
 import { formatLiters, parseDecimal } from "../../lib/format";
 import {
@@ -118,9 +122,14 @@ function MeasurementCell({
 
   if (m) {
     return (
-      <div className="rounded-xl bg-pasture-100 px-2 py-2.5 text-center">
+      <button
+        type="button"
+        onClick={onQuickEntry}
+        className="w-full rounded-xl bg-pasture-100 px-2 py-2.5 text-center hover:bg-pasture-200 min-h-[44px]"
+        aria-label="Corrigir medição"
+      >
         <p className="tnum font-semibold text-sm">{formatLiters(m.liters)}</p>
-      </div>
+      </button>
     );
   }
 
@@ -149,11 +158,15 @@ function MeasurementCell({
 function GroupCard({
   group,
   date,
+  expanded,
+  onToggle,
   onStartWalk,
   onQuickEntry,
 }: {
   group: HerdGroup;
   date: string;
+  expanded: boolean;
+  onToggle: () => void;
   onStartWalk: (groupId: string, shift: MilkingShift) => void;
   onQuickEntry: (groupId: string, shift: MilkingShift, animalId: string) => void;
 }) {
@@ -171,15 +184,25 @@ function GroupCard({
 
   return (
     <Card className="mb-4">
-      <div className="flex items-center justify-between gap-2 px-4 pt-3.5 pb-2.5 md:px-5 border-b border-black/5">
-        <p className="font-semibold">{group.name}</p>
-        <Chip tone="neutro">
-          {group.milkingsPerDay === 2 ? "2 ordenhas/dia" : "1 ordenha/dia"}
-        </Chip>
-      </div>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between gap-2 px-4 py-3.5 md:px-5 text-left"
+        aria-expanded={expanded}
+      >
+        <span className="min-w-0">
+          <span className="block font-semibold truncate">{group.name}</span>
+          <span className="block text-xs text-ink-faint mt-0.5">
+            {group.milkingsPerDay === 2 ? "2 ordenhas/dia" : "1 ordenha/dia"}
+          </span>
+        </span>
+        <ChevronDown size={18} className={`shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`} />
+      </button>
 
-      {/* Totais por turno + ação de registrar */}
-      <div className="px-4 py-3 md:px-5 border-b border-black/5 space-y-2">
+      {expanded && (
+        <>
+          {/* Totais por turno + ação de registrar */}
+          <div className="px-4 py-3 md:px-5 border-b border-black/5 space-y-2">
         {shifts.map((sh, i) => {
           const session = sessions[i];
           const total = session ? sessionTotal(state, session.id) : null;
@@ -215,14 +238,14 @@ function GroupCard({
             </div>
           );
         })}
-      </div>
+          </div>
 
-      {animals.length === 0 ? (
-        <p className="px-4 py-4 md:px-5 text-sm text-ink-soft">
-          Nenhum animal ativo neste Lote.
-        </p>
-      ) : (
-        <div className="px-4 py-2 md:px-5">
+          {animals.length === 0 ? (
+            <p className="px-4 py-4 md:px-5 text-sm text-ink-soft">
+              Nenhum animal ativo neste Lote.
+            </p>
+          ) : (
+            <div className="px-4 py-2 md:px-5">
           {/* Cabeçalho das colunas de turno */}
           <div
             className={`grid gap-2 py-1.5 ${
@@ -272,7 +295,9 @@ function GroupCard({
               </div>
             ))}
           </div>
-        </div>
+            </div>
+          )}
+        </>
       )}
     </Card>
   );
@@ -298,10 +323,14 @@ function QuickEntrySheet({
   const existing = measurementIn(state, sessionId, animalId);
   const initial = existing ? String(existing.liters).replace(".", ",") : "";
   const [value, setValue] = useState(initial);
+  const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const parsed = parseDecimal(value);
-  const guard = useUnsavedGuard(value.trim() !== "" && value !== initial, onClose);
+  const guard = useUnsavedGuard(
+    value.trim() !== "" && (value !== initial || (existing !== undefined && reason.trim() !== "")),
+    onClose,
+  );
 
   if (!animal) return null;
 
@@ -309,18 +338,31 @@ function QuickEntrySheet({
     if (parsed === null || busy) return;
     setBusy(true);
     setError(null);
-    const outcome = await dispatch({
-      type: "RecordIndividualMilkMeasurement",
-      sessionId,
-      animalId: animal!.id,
-      liters: parsed,
-    });
+    const outcome = await dispatch(
+      existing
+        ? {
+            type: "CorrectOperationalFact",
+            entityType: "medicao_individual",
+            entityId: existing.id,
+            newLiters: parsed,
+            description: `Correção na medição individual de ${animal!.name}`,
+            before: formatLiters(existing.liters),
+            after: formatLiters(parsed),
+            reason: reason.trim(),
+          }
+        : {
+            type: "RecordIndividualMilkMeasurement",
+            sessionId,
+            animalId: animal!.id,
+            liters: parsed,
+          },
+    );
     setBusy(false);
     if (!outcome.ok) {
       setError(outcome.message);
       return;
     }
-    onSaved(`Medição registrada — ${animal!.name} · ${formatLiters(parsed)}`);
+    onSaved(`${existing ? "Medição corrigida" : "Medição registrada"} — ${animal!.name} · ${formatLiters(parsed)}`);
     onClose();
   }
 
@@ -337,8 +379,8 @@ function QuickEntrySheet({
             <Button variant="ghost" onClick={guard.requestClose} className="flex-1">
               Cancelar
             </Button>
-            <Button onClick={submit} disabled={parsed === null || busy} className="flex-1">
-              {busy ? "Salvando…" : "Salvar medição"}
+            <Button onClick={submit} disabled={parsed === null || busy || (existing !== undefined && reason.trim() === "")} className="flex-1">
+              {busy ? "Salvando…" : existing ? "Confirmar correção" : "Salvar medição"}
             </Button>
           </div>
         )
@@ -363,6 +405,22 @@ function QuickEntrySheet({
       <p className="text-center text-sm text-ink-soft mt-2">
         Medição individual desta ordenha (litros)
       </p>
+      {existing && (
+        <Field
+          label="Motivo da correção"
+          hint="Obrigatório — fica na auditoria junto com o antes e o depois."
+        >
+          <textarea
+            className={`${inputCls} min-h-20 resize-y`}
+            placeholder="Ex.: conferi a anotação do caderno…"
+            value={reason}
+            onChange={(ev) => {
+              setReason(ev.target.value);
+              setError(null);
+            }}
+          />
+        </Field>
+      )}
       {error && (
         <p className="text-center text-sm text-danger-600 mt-3" role="alert">
           {error}
@@ -555,7 +613,15 @@ function MeasurementScreen({
 
 export default function ControleTab() {
   const { state, dispatch } = useFarm();
-  const [date, setDate] = useState(today());
+  const [searchParams] = useSearchParams();
+  const initialDate = searchParams.get("date");
+  const initialGroupId = searchParams.get("groupId");
+  const [date, setDate] = useState(
+    initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? initialDate : today(),
+  );
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+    () => new Set(initialGroupId ? [initialGroupId] : []),
+  );
   const [wizard, setWizard] = useState<Wizard>({ step: "dia" });
   const [quick, setQuick] = useState<{
     sessionId: string;
@@ -737,6 +803,13 @@ export default function ControleTab() {
             key={g.id}
             group={g}
             date={date}
+            expanded={expandedGroups.has(g.id)}
+            onToggle={() => setExpandedGroups((current) => {
+              const next = new Set(current);
+              if (next.has(g.id)) next.delete(g.id);
+              else next.add(g.id);
+              return next;
+            })}
             onStartWalk={startWalk}
             onQuickEntry={quickEntry}
           />

@@ -97,15 +97,15 @@ const reviewedMeasurementBindings = z.array(
 );
 
 /**
- * Correção de fato operacional (producao_diaria | coleta) — substitui o
+ * Correção de fato operacional — substitui o
  * `apply(s)` do protótipo. `reason` é obrigatório; `before`/`after`/`description`
  * são as strings de exibição gravadas na auditoria.
  */
 const correctionSchema = z.object({
   type: z.literal('CorrectOperationalFact'),
-  entityType: z.enum(['producao_diaria', 'coleta']),
+  entityType: z.enum(['producao_diaria', 'coleta', 'medicao_individual']),
   entityId: z.string().min(1),
-  newLiters: liters,
+  newLiters: z.number().finite(),
   reason,
   description: z.string().min(1),
   before: z.string(),
@@ -489,19 +489,40 @@ export async function executeCommand(tx: Tx, ctx: AuthContext, a: CommandAction)
       // Correção exige motivo (zod) e grava before/after na auditoria.
       let result: unknown;
       if (a.entityType === 'producao_diaria') {
+        if (a.newLiters <= 0) throw badRequest('INVALID_VOLUME', 'O volume deve ser maior que zero.');
         const current = (
           await tx.select().from(dailyMilkProductions).where(and(eq(dailyMilkProductions.id, a.entityId), eq(dailyMilkProductions.farmId, farmId))).limit(1)
         )[0];
         if (!current) throw notFound('FACT_NOT_FOUND', `Produção diária ${a.entityId} não encontrada.`);
         const updated = await tx.update(dailyMilkProductions).set({ liters: a.newLiters }).where(eq(dailyMilkProductions.id, a.entityId)).returning();
         result = { production: toDailyMilkProduction(updated[0]) };
-      } else {
+      } else if (a.entityType === 'coleta') {
+        if (a.newLiters <= 0) throw badRequest('INVALID_VOLUME', 'O volume deve ser maior que zero.');
         const current = (
           await tx.select().from(milkCollections).where(and(eq(milkCollections.id, a.entityId), eq(milkCollections.farmId, farmId))).limit(1)
         )[0];
         if (!current) throw notFound('FACT_NOT_FOUND', `Coleta ${a.entityId} não encontrada.`);
         const updated = await tx.update(milkCollections).set({ liters: a.newLiters }).where(eq(milkCollections.id, a.entityId)).returning();
         result = { collection: toMilkCollection(updated[0]) };
+      } else {
+        if (!isIndividualMilkLiters(a.newLiters)) {
+          throw badRequest('INVALID_MEASUREMENT', 'A medição individual deve estar entre 0 e 100 L.');
+        }
+        const current = (
+          await tx
+            .select({ measurement: individualMilkMeasurements, session: milkControlSessions })
+            .from(individualMilkMeasurements)
+            .innerJoin(milkControlSessions, eq(milkControlSessions.id, individualMilkMeasurements.sessionId))
+            .where(and(eq(individualMilkMeasurements.id, a.entityId), eq(milkControlSessions.farmId, farmId)))
+            .limit(1)
+        )[0];
+        if (!current) throw notFound('FACT_NOT_FOUND', `Medição individual ${a.entityId} não encontrada.`);
+        const updated = await tx
+          .update(individualMilkMeasurements)
+          .set({ liters: a.newLiters })
+          .where(eq(individualMilkMeasurements.id, a.entityId))
+          .returning();
+        result = { measurement: toMeasurement(updated[0]) };
       }
       await audit(tx, ctx, {
         action: 'correcao',
