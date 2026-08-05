@@ -62,6 +62,106 @@ test('interpreta medição individual quando o LLM devolve litros como texto OCR
   }
 });
 
+test('normaliza Controle leiteiro quando o modelo omite o discriminador type', async () => {
+  process.env.DATABASE_URL ??= 'postgresql://test:test@127.0.0.1:5432/test';
+  process.env.OPENROUTER_API_KEY = 'test-key';
+
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+
+  try {
+    const { interpretAssistantCapture } = await import('./assistant.js');
+    globalThis.fetch = async () => {
+      calls += 1;
+      return Response.json({
+        choices: [{
+          finish_reason: 'stop',
+          message: {
+            content: JSON.stringify({
+              intents: [{
+                date: 'hoje',
+                scopeLabel: 'Lote 1',
+                period: 'MORNING',
+                measurements: [{
+                  animalLabel: 'Mimosa',
+                  totalLiters: '12,5',
+                  rawValueText: 'Mimosa - 12,5',
+                  confidence: 'HIGH',
+                }],
+              }],
+            }),
+          },
+        }],
+      });
+    };
+
+    const [proposal] = await interpretAssistantCapture('Controle do Lote 1', {
+      groups: [{ name: 'Lote 1', milkingsPerDay: 2 }],
+      animals: [{ name: 'Mimosa' }],
+      feedItems: [],
+    });
+
+    assert.equal(calls, 1);
+    assert.equal(proposal.kind, 'controle_leiteiro');
+    assert.match(proposal.fields.find((field) => field.key === 'rows')?.value ?? '', /Mimosa 12,5/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('registra diagnóstico estrutural seguro quando a saída do modelo é inválida', async () => {
+  process.env.DATABASE_URL ??= 'postgresql://test:test@127.0.0.1:5432/test';
+  process.env.OPENROUTER_API_KEY = 'test-key';
+
+  const originalFetch = globalThis.fetch;
+  const originalWarn = console.warn;
+  const originalError = console.error;
+  const entries: string[] = [];
+
+  try {
+    globalThis.fetch = async () => Response.json({
+      model: 'provider/model-version',
+      usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      choices: [{
+        finish_reason: 'stop',
+        message: {
+          content: JSON.stringify({
+            intents: [{ unsupported: 'SENSITIVE_MARKER' }],
+          }),
+        },
+      }],
+    });
+    console.warn = (entry: string) => entries.push(entry);
+    console.error = (entry: string) => entries.push(entry);
+    const { interpretAssistantCapture } = await import('./assistant.js');
+
+    await assert.rejects(
+      interpretAssistantCapture(
+        'CAPTURE_SENSITIVE_MARKER',
+        { groups: [], animals: [], feedItems: [] },
+        { requestId: 'req-test', captureId: 'cap-test', sourceKind: 'text' },
+      ),
+      (error: unknown) => error instanceof ApiError && error.code === 'LLM_INVALID_OUTPUT',
+    );
+
+    const logs = entries.map((entry) => JSON.parse(entry) as Record<string, unknown>);
+    const attempts = logs.filter((entry) => entry.event === 'assistant.interpretation.attempt');
+    assert.equal(attempts.length, 2);
+    assert.equal(attempts[0].request_id, 'req-test');
+    assert.equal(attempts[0].failure_category, 'schema_validation');
+    assert.equal(attempts[0].finish_reason, 'stop');
+    assert.equal(attempts[0].provider_model, 'provider/model-version');
+    assert.equal(attempts[0].total_tokens, 15);
+    assert.match(String(attempts[0].validation_issues), /intents\.0\.type/);
+    assert.equal(logs.some((entry) => entry.event === 'assistant.interpretation.failed'), true);
+    assert.doesNotMatch(entries.join('\n'), /SENSITIVE_MARKER/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.warn = originalWarn;
+    console.error = originalError;
+  }
+});
+
 test('interpreta linhas OCR no padrão "Animal - litros" sem concatenar números do rótulo', async () => {
   process.env.DATABASE_URL ??= 'postgresql://test:test@127.0.0.1:5432/test';
   process.env.OPENROUTER_API_KEY = 'test-key';

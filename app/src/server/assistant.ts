@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { env } from './env.js';
 import { ApiError } from './http.js';
+import { errorType, logger } from './logger.js';
 
 /**
  * Fronteira única com o modelo. O provider só entende a Captura e devolve
@@ -124,18 +125,19 @@ Regras invioláveis:
 - Trato é alimento fornecido a um Lote; compra de alimento é lançamento financeiro nesta V1.
 - Não diagnostique doença, não recomende descarte e não crie ocupação de Pasto ou Instalação a partir da fala.`;
 
-const ACTIONS = `Tipos de intent suportados:
+const ACTIONS = `Tipos de intent suportados. O campo type é obrigatório em cada intent:
 
-1) daily_milk_total: produção diária da Fazenda. Campos: date, scopeLabel, morningLiters, afternoonLiters, rawValueText, confidence, notes.
-2) individual_milk_session: controle leiteiro. Campos: date, scopeLabel, period, measurements[]. Cada medição tem animalLabel, morningLiters, afternoonLiters, totalLiters, rawValueText, confidence, notes. Para “Leite por vaca”, preserve cada linha no padrão “animal - volume” e só aceite volumes de 0 a 100 L com 1 casa decimal (vírgula ou ponto).
-3) milk_collection: coleta. Campos: date, liters, time, sourceLabel, rawValueText, confidence, notes.
-4) revenue: receita. Campos: date, categoryLabel, description, amount, received, dueDate, confidence, notes.
-5) purchase: despesa. Campos: date, categoryLabel, description, amount, paid, dueDate, confidence, notes.
-6) feeding_event: trato. Campos: date, contextLabel, scopeLabel, lines[] com itemLabel, quantity, unitLabel, rawValueText.
-7) unknown: não corresponde a um Registro suportado. Campos: type, reason.`;
+1) type: "daily_milk_total": produção diária da Fazenda. Campos: type, date, scopeLabel, morningLiters, afternoonLiters, rawValueText, confidence, notes.
+2) type: "individual_milk_session": controle leiteiro. Campos: type, date, scopeLabel, period, measurements[], confidence, notes. Cada medição tem animalLabel, morningLiters, afternoonLiters, totalLiters, rawValueText, confidence, notes. Para “Leite por vaca”, preserve cada linha no padrão “animal - volume” e só aceite volumes de 0 a 100 L com 1 casa decimal (vírgula ou ponto).
+3) type: "milk_collection": coleta. Campos: type, date, liters, time, sourceLabel, rawValueText, confidence, notes.
+4) type: "revenue": receita. Campos: type, date, categoryLabel, description, amount, received, dueDate, confidence, notes.
+5) type: "purchase": despesa. Campos: type, date, categoryLabel, description, amount, paid, dueDate, confidence, notes.
+6) type: "feeding_event": trato. Campos: type, date, contextLabel, scopeLabel, lines[] com itemLabel, quantity, unitLabel, rawValueText, confidence, notes.
+7) type: "unknown": não corresponde a um Registro suportado. Campos: type, reason.`;
 
 const OUTPUT_CONTRACT = `Responda SOMENTE com JSON válido, sem Markdown, no formato:
 { "intents": [ { ... } ] }
+Cada intent deve conter explicitamente o campo type. Intents diferentes de unknown também devem conter confidence e notes no nível da intent.
 Use null quando um campo opcional não foi informado. Não use campos extras.`;
 
 function dateKeyInSaoPaulo(date = new Date()): string {
@@ -381,17 +383,31 @@ function modelDate(value: unknown): unknown {
   };
 }
 
+function inferIntentType(intent: Record<string, unknown>): unknown {
+  if (typeof intent.type === 'string') return intent.type;
+  if (Array.isArray(intent.measurements)) return 'individual_milk_session';
+  if (Array.isArray(intent.lines)) return 'feeding_event';
+  if ('received' in intent) return 'revenue';
+  if ('paid' in intent) return 'purchase';
+  if ('liters' in intent && ('time' in intent || 'sourceLabel' in intent)) return 'milk_collection';
+  if ('morningLiters' in intent || 'afternoonLiters' in intent) return 'daily_milk_total';
+  if ('reason' in intent) return 'unknown';
+  return undefined;
+}
+
 function normalizeModelIntent(value: unknown): unknown {
   if (!value || typeof value !== 'object') return value;
   const intent = value as Record<string, unknown>;
+  const type = inferIntentType(intent);
   const common = {
     ...intent,
+    type,
     date: modelDate(intent.date),
     confidence: modelConfidence(intent.confidence),
     notes: typeof intent.notes === 'string' ? intent.notes : null,
   };
 
-  if (intent.type === 'individual_milk_session') {
+  if (type === 'individual_milk_session') {
     return {
       ...common,
       scopeLabel: typeof intent.scopeLabel === 'string' ? intent.scopeLabel : null,
@@ -413,19 +429,19 @@ function normalizeModelIntent(value: unknown): unknown {
     };
   }
 
-  if (intent.type === 'daily_milk_total') {
+  if (type === 'daily_milk_total') {
     return { ...common, scopeLabel: typeof intent.scopeLabel === 'string' ? intent.scopeLabel : null, morningLiters: nullableModelNumber(intent.morningLiters), afternoonLiters: nullableModelNumber(intent.afternoonLiters), rawValueText: typeof intent.rawValueText === 'string' ? intent.rawValueText : '' };
   }
-  if (intent.type === 'milk_collection') {
+  if (type === 'milk_collection') {
     return { ...common, liters: nullableModelNumber(intent.liters), time: typeof intent.time === 'string' ? intent.time : null, sourceLabel: typeof intent.sourceLabel === 'string' ? intent.sourceLabel : null, rawValueText: typeof intent.rawValueText === 'string' ? intent.rawValueText : '' };
   }
-  if (intent.type === 'revenue' || intent.type === 'purchase') {
-    return { ...common, categoryLabel: typeof intent.categoryLabel === 'string' ? intent.categoryLabel : null, description: typeof intent.description === 'string' ? intent.description : '', amount: nullableModelNumber(intent.amount), [intent.type === 'revenue' ? 'received' : 'paid']: typeof (intent.type === 'revenue' ? intent.received : intent.paid) === 'boolean' ? (intent.type === 'revenue' ? intent.received : intent.paid) : null, dueDate: intent.dueDate === null || intent.dueDate === undefined ? null : modelDate(intent.dueDate) };
+  if (type === 'revenue' || type === 'purchase') {
+    return { ...common, categoryLabel: typeof intent.categoryLabel === 'string' ? intent.categoryLabel : null, description: typeof intent.description === 'string' ? intent.description : '', amount: nullableModelNumber(intent.amount), [type === 'revenue' ? 'received' : 'paid']: typeof (type === 'revenue' ? intent.received : intent.paid) === 'boolean' ? (type === 'revenue' ? intent.received : intent.paid) : null, dueDate: intent.dueDate === null || intent.dueDate === undefined ? null : modelDate(intent.dueDate) };
   }
-  if (intent.type === 'feeding_event') {
+  if (type === 'feeding_event') {
     return { ...common, contextLabel: typeof intent.contextLabel === 'string' ? intent.contextLabel : null, scopeLabel: typeof intent.scopeLabel === 'string' ? intent.scopeLabel : null, lines: Array.isArray(intent.lines) ? intent.lines.map((item) => { const line = item && typeof item === 'object' ? item as Record<string, unknown> : {}; return { ...line, itemLabel: typeof line.itemLabel === 'string' ? line.itemLabel : '', quantity: nullableModelNumber(line.quantity), unitLabel: typeof line.unitLabel === 'string' ? line.unitLabel : null, rawValueText: typeof line.rawValueText === 'string' ? line.rawValueText : '' }; }) : [] };
   }
-  if (intent.type === 'unknown') return { type: 'unknown', reason: typeof intent.reason === 'string' ? intent.reason : 'Captura não reconhecida.' };
+  if (type === 'unknown') return { type: 'unknown', reason: typeof intent.reason === 'string' ? intent.reason : 'Captura não reconhecida.' };
   return common;
 }
 
@@ -435,16 +451,70 @@ function normalizeModelOutput(value: unknown): unknown {
   return { ...output, intents: Array.isArray(output.intents) ? output.intents.map(normalizeModelIntent) : [] };
 }
 
-function parseInterpretation(raw: unknown): { success: true; data: z.infer<typeof interpretationSchema> } | { success: false } {
+type ParseFailureCategory = 'empty_content' | 'invalid_json' | 'schema_validation';
+type ParseInterpretationResult =
+  | { success: true; data: z.infer<typeof interpretationSchema> }
+  | {
+    success: false;
+    category: ParseFailureCategory;
+    issueCount: number;
+    issueSummary: string | null;
+  };
+
+function validationIssueSummary(error: z.ZodError): string | null {
+  const summary = error.issues
+    .slice(0, 8)
+    .map((issue) => `${issue.path.join('.') || 'root'}:${issue.code}`)
+    .join(',');
+  return summary ? summary.slice(0, 600) : null;
+}
+
+function parseInterpretation(raw: unknown): ParseInterpretationResult {
   const content = messageContent(raw);
-  if (!content.trim()) return { success: false };
+  if (!content.trim()) {
+    return { success: false, category: 'empty_content', issueCount: 0, issueSummary: null };
+  }
   try {
     const parsed: unknown = JSON.parse(stripMarkdownJson(content));
     const result = interpretationSchema.safeParse(normalizeModelOutput(parsed));
-    return result.success ? { success: true, data: result.data } : { success: false };
+    return result.success
+      ? { success: true, data: result.data }
+      : {
+        success: false,
+        category: 'schema_validation',
+        issueCount: result.error.issues.length,
+        issueSummary: validationIssueSummary(result.error),
+      };
   } catch {
-    return { success: false };
+    return { success: false, category: 'invalid_json', issueCount: 0, issueSummary: null };
   }
+}
+
+type AssistantObservability = {
+  requestId?: string | null;
+  captureId?: string | null;
+  sourceKind?: 'text' | 'image' | 'mixed';
+};
+
+function modelResponseMetadata(raw: unknown) {
+  const response = raw as {
+    model?: unknown;
+    choices?: Array<{ finish_reason?: unknown }>;
+    usage?: {
+      prompt_tokens?: unknown;
+      completion_tokens?: unknown;
+      total_tokens?: unknown;
+    };
+  } | null;
+  return {
+    provider_model: typeof response?.model === 'string' ? response.model : undefined,
+    finish_reason: typeof response?.choices?.[0]?.finish_reason === 'string'
+      ? response.choices[0].finish_reason
+      : undefined,
+    prompt_tokens: typeof response?.usage?.prompt_tokens === 'number' ? response.usage.prompt_tokens : undefined,
+    completion_tokens: typeof response?.usage?.completion_tokens === 'number' ? response.usage.completion_tokens : undefined,
+    total_tokens: typeof response?.usage?.total_tokens === 'number' ? response.usage.total_tokens : undefined,
+  };
 }
 
 function buildSystemPrompt(context: AssistantContext): string {
@@ -502,7 +572,11 @@ async function chat(
   return raw;
 }
 
-export async function interpretAssistantCapture(text: string, context: AssistantContext): Promise<AssistantProposalInput[]> {
+export async function interpretAssistantCapture(
+  text: string,
+  context: AssistantContext,
+  observability: AssistantObservability = {},
+): Promise<AssistantProposalInput[]> {
   const configuration = env();
   if (!configuration.OPENROUTER_API_KEY) {
     throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Assistente real não configurado neste ambiente.');
@@ -515,25 +589,97 @@ export async function interpretAssistantCapture(text: string, context: Assistant
     appUrl: configuration.PUBLIC_APP_URL,
     timeoutMs: configuration.OPENROUTER_TIMEOUT_MS,
   };
+  const startedAt = performance.now();
   const messages: ChatMessage[] = [
     { role: 'system', content: buildSystemPrompt(context) },
     { role: 'user', content: text },
   ];
-  const firstRaw = await chat(config, messages);
-  let parsed = parseInterpretation(firstRaw);
+
+  const runAttempt = async (attempt: 'first' | 'repair', attemptMessages: ChatMessage[]) => {
+    const attemptStartedAt = performance.now();
+    let raw: unknown;
+    try {
+      raw = await chat(config, attemptMessages);
+    } catch (error) {
+      logger.error('assistant.interpretation.attempt', {
+        request_id: observability.requestId,
+        capture_id: observability.captureId,
+        source_kind: observability.sourceKind,
+        source_chars: text.length,
+        provider: 'openrouter',
+        configured_model: config.model,
+        attempt,
+        outcome: 'dependency_error',
+        error_code: error instanceof ApiError ? error.code : 'INTERNAL_ERROR',
+        error_type: errorType(error),
+        duration_ms: Math.round(performance.now() - attemptStartedAt),
+      });
+      throw error;
+    }
+    const parsed = parseInterpretation(raw);
+    const metadata = modelResponseMetadata(raw);
+    const log = parsed.success ? logger.info : logger.warn;
+    log('assistant.interpretation.attempt', {
+      request_id: observability.requestId,
+      capture_id: observability.captureId,
+      source_kind: observability.sourceKind,
+      source_chars: text.length,
+      provider: 'openrouter',
+      configured_model: config.model,
+      attempt,
+      outcome: parsed.success ? 'success' : 'invalid_output',
+      failure_category: parsed.success ? undefined : parsed.category,
+      validation_issue_count: parsed.success ? undefined : parsed.issueCount,
+      validation_issues: parsed.success ? undefined : parsed.issueSummary ?? undefined,
+      duration_ms: Math.round(performance.now() - attemptStartedAt),
+      ...metadata,
+    });
+    return { raw, parsed };
+  };
+
+  const first = await runAttempt('first', messages);
+  let parsed = first.parsed;
   if (!parsed.success) {
-    const repairRaw = await chat(config, [
+    const repair = await runAttempt('repair', [
       ...messages,
-      { role: 'assistant', content: messageContent(firstRaw) },
+      { role: 'assistant', content: messageContent(first.raw) },
       { role: 'user', content: 'Corrija a resposta anterior. Devolva somente JSON válido no contrato, preserve os dados da Captura e não invente valores.' },
     ]);
-    parsed = parseInterpretation(repairRaw);
+    parsed = repair.parsed;
   }
   if (!parsed.success) {
+    logger.error('assistant.interpretation.failed', {
+      request_id: observability.requestId,
+      capture_id: observability.captureId,
+      source_kind: observability.sourceKind,
+      source_chars: text.length,
+      provider: 'openrouter',
+      configured_model: config.model,
+      outcome: 'invalid_output',
+      failure_category: parsed.category,
+      validation_issue_count: parsed.issueCount,
+      validation_issues: parsed.issueSummary ?? undefined,
+      attempts: 2,
+      duration_ms: Math.round(performance.now() - startedAt),
+    });
     throw new ApiError(502, 'LLM_INVALID_OUTPUT', 'O Assistente não conseguiu organizar a Captura. Ela continua disponível para nova tentativa.');
   }
 
-  return parsed.data.intents.map((intent) => toProposal(intent, context));
+  const proposals = parsed.data.intents.map((intent) => toProposal(intent, context));
+  logger.info('assistant.interpretation.completed', {
+    request_id: observability.requestId,
+    capture_id: observability.captureId,
+    source_kind: observability.sourceKind,
+    source_chars: text.length,
+    provider: 'openrouter',
+    configured_model: config.model,
+    outcome: 'success',
+    attempts: first.parsed.success ? 1 : 2,
+    intent_count: parsed.data.intents.length,
+    proposal_count: proposals.length,
+    duration_ms: Math.round(performance.now() - startedAt),
+  });
+  return proposals;
 }
 
 /** Leitura literal de imagem. Não produz intents nem inferências de domínio. */

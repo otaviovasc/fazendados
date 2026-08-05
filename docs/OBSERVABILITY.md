@@ -92,6 +92,19 @@ Medir cada etapa separadamente:
 - tempo Captura → Confirmação;
 - idempotência e IDs dos Registros gerados.
 
+Eventos da interpretação:
+
+- `assistant.interpretation.attempt`: uma linha por tentativa (`first` ou
+  `repair`) com `request_id`, `capture_id`, `source_kind`, `source_chars`,
+  provider/modelo, duração, tokens, `finish_reason` e `outcome`;
+- quando `outcome=invalid_output`, incluir `failure_category`
+  (`empty_content`, `invalid_json` ou `schema_validation`), contagem de issues e
+  no máximo oito pares `caminho:código` em `validation_issues`;
+- `assistant.interpretation.completed`: resumo único de sucesso com tentativas,
+  quantidade de intents/Propostas e duração total;
+- `assistant.interpretation.failed`: resumo único após esgotar o reparo, antes
+  do erro HTTP correlacionado pelo mesmo `request_id`.
+
 Não registrar áudio, imagem, documento, texto integral da Captura ou resposta
 integral do modelo no stream geral de logs.
 

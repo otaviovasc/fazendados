@@ -276,7 +276,19 @@ export function createApp() {
       capture.extractedText ? `Leitura literal da foto:\n${capture.extractedText}` : null,
     ].filter((part): part is string => Boolean(part)).join('\n\n');
     if (!sourceText) throw new ApiError(400, 'CAPTURE_NOT_READ', 'Informe o texto ou leia a foto antes de interpretar a Captura.');
-    const proposals = await interpretAssistantCapture(sourceText, await assistantContext(farm.id));
+    const proposals = await interpretAssistantCapture(
+      sourceText,
+      await assistantContext(farm.id),
+      {
+        requestId: c.res.headers.get('x-request-id') ?? null,
+        captureId: capture.id,
+        sourceKind: capture.text && capture.extractedText
+          ? 'mixed'
+          : capture.extractedText
+            ? 'image'
+            : 'text',
+      },
+    );
     const stored = await getDb().transaction(async (tx) => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`assistant_capture:${farm.id}:${capture.id}`}))`);
       const alreadyStored = await tx.select().from(assistantProposals).where(eq(assistantProposals.captureId, capture.id));

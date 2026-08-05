@@ -8,9 +8,11 @@ type LogFields = Record<string, LogValue>;
 type LogLevel = 'info' | 'warn' | 'error';
 
 const blockedField = /(?:authorization|cookie|password|secret|token|api[_-]?key|payload|body|capture[_-]?text|extracted[_-]?text|image|media)/i;
+const safeTokenCountField = /^(?:prompt|completion|total)_tokens$/;
 
 function safeFields(fields: LogFields) {
-  return Object.fromEntries(Object.entries(fields).filter(([key, value]) => value !== undefined && !blockedField.test(key)));
+  return Object.fromEntries(Object.entries(fields).filter(([key, value]) =>
+    value !== undefined && (safeTokenCountField.test(key) || !blockedField.test(key))));
 }
 
 function write(level: LogLevel, event: string, fields: LogFields = {}) {
