@@ -342,7 +342,7 @@ export async function executeCommand(tx: Tx, ctx: AuthContext, a: CommandAction)
         .where(and(eq(individualMilkMeasurements.sessionId, a.sessionId), eq(individualMilkMeasurements.animalId, a.animalId)))
         .limit(1);
       if (duplicate.length > 0) {
-        throw conflict('MEASUREMENT_EXISTS', `Já existe medição de ${animal.name} neste Controle leiteiro. Use Correção para ajustar o valor.`);
+        throw conflict('MEASUREMENT_EXISTS', `Já existe medição de ${animal.name} neste Controle leiteiro. O Registro existente não será sobrescrito automaticamente.`);
       }
       const inserted = await tx
         .insert(individualMilkMeasurements)
@@ -1112,7 +1112,7 @@ async function materializeAssistantProposal(
         .where(and(eq(individualMilkMeasurements.sessionId, sessionId), eq(individualMilkMeasurements.animalId, row.animalId)))
         .limit(1);
       if (duplicate.length > 0) {
-        throw conflict('MEASUREMENT_EXISTS', `Já existe medição de ${animalsById.get(row.animalId)?.name ?? row.animalId} neste Controle leiteiro. Use Correção para ajustar o valor.`);
+        throw conflict('MEASUREMENT_EXISTS', `Já existe medição de ${animalsById.get(row.animalId)?.name ?? row.animalId} neste Controle leiteiro. O Registro existente não será sobrescrito automaticamente.`);
       }
       const inserted = await tx
         .insert(individualMilkMeasurements)

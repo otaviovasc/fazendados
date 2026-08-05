@@ -249,6 +249,15 @@ como `12,5 L 3`, é inválido e deve voltar para Revisão sem ser convertido em
 fato. A linha esperada em “Leite por vaca” é `animal - volume`, preservando o
 texto original antes da confirmação humana.
 
+### D-037 — Nova leitura não sobrescreve Registro confirmado no V1
+
+Uma nova foto ou tentativa de leitura é uma nova Captura e gera uma nova
+Proposta; não há versionamento de OCR no V1. Repetir a confirmação da mesma
+Proposta é idempotente. Se já existe uma Medição individual para o mesmo
+Controle leiteiro e Animal, uma nova Confirmação é rejeitada e o Registro
+existente permanece intacto. Qualquer substituição futura deverá ocorrer por
+um comando explícito de Correção, com motivo e auditoria antes/depois.
+
 ## Pendentes
 
 | ID | Decisão | Recomendação atual |

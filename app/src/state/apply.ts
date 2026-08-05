@@ -2,10 +2,9 @@
 //
 // Duas funções complementares:
 // - `applyOptimistic`: reflete imediatamente comandos cujo resultado é
-//   determinístico a partir da ação (sessão de controle e medições — o
-//   servidor usa o sessionId enviado pelo cliente e faz upsert por
-//   (sessionId, animalId)). É o que mantém o caminho guiado de medições
-//   fluido, sem esperar a rede a cada Animal.
+//   determinístico a partir da ação (sessão de controle e novas medições). Uma
+//   medição já existente nunca é substituída otimisticamente; o servidor é a
+//   autoridade para rejeitar a duplicata.
 // - `applyCommandResult`: incorpora o resultado autoritativo devolvido por
 //   POST /api/commands (entidades com ids do servidor). O que não vem no
 //   resultado (ex.: audit_events) converge pelo refresh de bootstrap
@@ -41,8 +40,8 @@ function upsertById<T extends { id: string }>(list: T[], item: T): T[] {
   return next;
 }
 
-/** Medições são upsert por (sessão, animal) — a chave natural do fato. */
-function upsertMeasurement(
+/** Mescla o resultado autoritativo pela chave natural (sessão, animal). */
+function mergeMeasurement(
   list: IndividualMilkMeasurement[],
   item: IndividualMilkMeasurement,
 ): IndividualMilkMeasurement[] {
@@ -69,13 +68,16 @@ export function applyOptimistic(s: FarmState, a: Action): FarmState {
       return { ...s, sessions: [...s.sessions, session] };
     }
     case "RecordIndividualMilkMeasurement": {
+      if (s.measurements.some((x) => x.sessionId === a.sessionId && x.animalId === a.animalId)) {
+        return s;
+      }
       const measurement: IndividualMilkMeasurement = {
         id: uid("mm"),
         sessionId: a.sessionId,
         animalId: a.animalId,
         liters: a.liters,
       };
-      return { ...s, measurements: upsertMeasurement(s.measurements, measurement) };
+      return { ...s, measurements: [...s.measurements, measurement] };
     }
     case "CompleteMilkControlSession":
       return {
@@ -119,7 +121,7 @@ export function applyCommandResult(s: FarmState, a: Action, result: unknown): Fa
   if (r.production) next = { ...next, productions: upsertById(next.productions, r.production) };
   if (r.session) next = { ...next, sessions: upsertById(next.sessions, r.session) };
   if (r.measurement)
-    next = { ...next, measurements: upsertMeasurement(next.measurements, r.measurement) };
+    next = { ...next, measurements: mergeMeasurement(next.measurements, r.measurement) };
   if (r.collection) next = { ...next, collections: upsertById(next.collections, r.collection) };
   if (r.animal) next = { ...next, animals: upsertById(next.animals, r.animal) };
   if (r.group) next = { ...next, groups: upsertById(next.groups, r.group) };
