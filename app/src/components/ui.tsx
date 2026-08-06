@@ -256,8 +256,8 @@ export function Sheet({
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[1100] flex items-end sm:items-center justify-center">
-      <div className="absolute inset-0 bg-ink/40" onClick={onClose} />
-      <div className="relative w-full sm:max-w-md bg-paper-card rounded-t-3xl sm:rounded-2xl max-h-[88vh] flex flex-col safe-bottom">
+      <div className="absolute inset-0 bg-ink/40 animate-overlay" onClick={onClose} />
+      <div className="relative w-full sm:max-w-md bg-paper-card rounded-t-3xl sm:rounded-2xl max-h-[88vh] flex flex-col safe-bottom animate-sheet">
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-black/5">
           <h3 className="font-semibold">{title}</h3>
           <button onClick={onClose} className="p-2 -mr-2 text-ink-soft" aria-label="Fechar">

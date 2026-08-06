@@ -569,7 +569,7 @@ export function ReviewSheet({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-paper flex flex-col relative">
+    <div className="fixed inset-0 z-[1100] bg-paper flex flex-col relative animate-sheet">
       {/* Cabeçalho */}
       <header className="flex items-center gap-2 px-4 py-3 border-b border-black/5 bg-paper-card shrink-0">
         <button

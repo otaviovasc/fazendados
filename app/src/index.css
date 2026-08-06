@@ -26,6 +26,43 @@
   }
 }
 
+/* Entrada de overlays: backdrop esmaece; painel desliza de baixo (mobile)
+   ou cresce suavemente a partir do centro (sm+). */
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(32px);
+  }
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+}
+.animate-overlay {
+  animation: overlay-in 160ms ease-out;
+}
+.animate-sheet {
+  animation: sheet-in 220ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+@media (min-width: 640px) {
+  .animate-sheet {
+    animation-name: dialog-in;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-overlay,
+  .animate-sheet {
+    animation: none;
+  }
+}
+
 .leaflet-container {
   font-family: inherit;
 }
