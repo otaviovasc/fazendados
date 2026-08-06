@@ -106,6 +106,35 @@ export function formatRelativeDay(iso: ISODate): string {
   return formatDay(iso);
 }
 
+/** Primeiro dia do mês civil da data informada. */
+export function startOfMonth(iso: ISODate): ISODate {
+  return `${iso.slice(0, 7)}-01`;
+}
+
+export function addMonths(iso: ISODate, delta: number): ISODate {
+  const d = civilDateValue(startOfMonth(iso));
+  d.setUTCMonth(d.getUTCMonth() + delta);
+  return toISODate(d);
+}
+
+/**
+ * Grade do calendário do mês (semanas começando no domingo).
+ * `null` preenche as células fora do mês.
+ */
+export function calendarGrid(month: ISODate): (ISODate | null)[] {
+  const first = civilDateValue(startOfMonth(month));
+  const offset = first.getUTCDay();
+  const days = new Date(
+    Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)
+  ).getUTCDate();
+  const cells: (ISODate | null)[] = Array.from({ length: offset }, () => null);
+  for (let day = 1; day <= days; day++) {
+    cells.push(addDays(startOfMonth(month), day - 1));
+  }
+  while (cells.length % 7 !== 0) cells.push(null);
+  return cells;
+}
+
 export function nowISODateTime(): string {
   return new Date().toISOString();
 }

@@ -11,6 +11,16 @@ import {
 import { groupOf, SHIFT_LABEL, today, useFarm } from "../../state/store";
 import type { MilkingShift } from "../../domain/types";
 import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { Segmented } from "../analise/Segmented";
+import {
   AbsentValue,
   Button,
   Card,
@@ -29,7 +39,7 @@ import {
   useUnsavedGuard,
 } from "../../components/ui";
 import { formatLiters } from "../../lib/format";
-import { dateKeyInSaoPaulo, formatLong } from "../../lib/dates";
+import { addDays, dateKeyInSaoPaulo, formatDay, formatLong } from "../../lib/dates";
 
 export default function AnimalPage() {
   const { animalId } = useParams();
@@ -121,11 +131,10 @@ interface DiaMedido {
   total: number;
 }
 
-function DesempenhoCard({ animalId }: { animalId: string }) {
+/** Medições individuais do Animal agrupadas por dia (litros/dia = soma das ordenhas). */
+function useDiasMedidos(animalId: string): DiaMedido[] {
   const { state } = useFarm();
-
-  // Agrupa as Medições por dia: litros/dia = soma das ordenhas do dia.
-  const dias = useMemo<DiaMedido[]>(() => {
+  return useMemo<DiaMedido[]>(() => {
     const sessionById = new Map(state.sessions.map((s) => [s.id, s]));
     const byDate = new Map<string, DiaMedido>();
     for (const m of state.measurements) {
@@ -150,6 +159,93 @@ function DesempenhoCard({ animalId }: { animalId: string }) {
       }))
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [state, animalId]);
+}
+
+type Periodo = "7" | "30" | "tudo";
+
+/** Gráfico de linha das medições diárias, com filtro de período. */
+function GraficoMedicao({ dias }: { dias: DiaMedido[] }) {
+  const [periodo, setPeriodo] = useState<Periodo>("tudo");
+
+  const dados = useMemo(() => {
+    const desde = periodo === "tudo" ? null : addDays(today(), -(Number(periodo) - 1));
+    return dias
+      .filter((d) => desde === null || d.date >= desde)
+      .map((d) => ({ date: d.date, label: formatDay(d.date), total: d.total }));
+  }, [dias, periodo]);
+
+  return (
+    <div className="mb-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+        <p className="text-xs text-ink-faint">Evolução das medições (L/dia)</p>
+        <Segmented
+          ariaLabel="Período do gráfico de medições"
+          options={[
+            { value: "7", label: "7 dias" },
+            { value: "30", label: "30 dias" },
+            { value: "tudo", label: "Tudo" },
+          ]}
+          value={periodo}
+          onChange={setPeriodo}
+        />
+      </div>
+      {dados.length < 2 ? (
+        <p className="text-sm text-ink-soft py-4 text-center">
+          Medições insuficientes no período para desenhar o gráfico.
+        </p>
+      ) : (
+        <div className="h-44 -mx-1">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={dados} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+              <CartesianGrid vertical={false} stroke="rgba(0,0,0,0.06)" />
+              <XAxis
+                dataKey="label"
+                tickLine={false}
+                axisLine={false}
+                minTickGap={24}
+                tick={{ fontSize: 11, fill: "#A8A29E" }}
+              />
+              <YAxis
+                width={36}
+                tickLine={false}
+                axisLine={false}
+                domain={["auto", "auto"]}
+                tick={{ fontSize: 11, fill: "#A8A29E" }}
+                tickFormatter={(v: number) => String(Math.round(v))}
+              />
+              <Tooltip
+                formatter={(value) => [
+                  typeof value === "number" ? formatLiters(value) : "sem medição",
+                  "Medição do dia",
+                ]}
+                labelFormatter={(label) => `Dia ${label}`}
+                contentStyle={{
+                  borderRadius: 12,
+                  border: "1px solid rgba(0,0,0,0.08)",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                  fontSize: 13,
+                }}
+              />
+              <Line
+                type="monotone"
+                dataKey="total"
+                stroke="#2F5233"
+                strokeWidth={2}
+                dot={{ r: 3, fill: "#2F5233", strokeWidth: 0 }}
+                activeDot={{ r: 4.5 }}
+                isAnimationActive={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DesempenhoCard({ animalId }: { animalId: string }) {
+  const { state } = useFarm();
+  const dias = useDiasMedidos(animalId);
 
   // Cobertura: dias medidos do Animal / dias com Controle leiteiro na Fazenda.
   const totalDiasControle = useMemo(
@@ -194,6 +290,9 @@ function DesempenhoCard({ animalId }: { animalId: string }) {
                 </span>
               </p>
             )}
+            <div className="mt-4">
+              <GraficoMedicao dias={dias} />
+            </div>
             <ul className="mt-3 divide-y divide-black/5">
               {[...dias].reverse().map((d) => (
                 <li key={d.date} className="py-2 text-sm">

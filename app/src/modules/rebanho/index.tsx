@@ -1,6 +1,16 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Beef, ChevronRight, Plus, Search, Users } from "lucide-react";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  Beef,
+  ChevronRight,
+  Minus,
+  Plus,
+  Search,
+  Users,
+} from "lucide-react";
+import { Line, LineChart } from "recharts";
 import {
   animalsInGroup,
   groupOf,
@@ -22,7 +32,7 @@ import {
   inputCls,
   useUnsavedGuard,
 } from "../../components/ui";
-import { formatDay, formatLong } from "../../lib/dates";
+import { formatLong } from "../../lib/dates";
 import { formatLiters } from "../../lib/format";
 
 /** Busca tolerante a maiúsculas e acentos. */
@@ -33,6 +43,60 @@ const norm = (s: string) =>
     .toLowerCase();
 
 type LoteFilter = "todos" | "sem_lote" | string;
+
+const round1 = (v: number) => Math.round(v * 10) / 10;
+
+const fmt1 = (v: number) =>
+  v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+/** Ração recomendada: 1 kg para cada 3 L da última medição diária. */
+const racaoRecomendada = (litrosDia: number) => round1(litrosDia / 3);
+
+/** Variação percentual entre os dois últimos dias medidos. */
+function variacao(totals: { liters: number }[]): number | null {
+  if (totals.length < 2) return null;
+  const [last, prev] = totals;
+  if (prev.liters <= 0) return null;
+  return ((last.liters - prev.liters) / prev.liters) * 100;
+}
+
+function VariacaoChip({ value }: { value: number | null }) {
+  if (value === null) return null;
+  const abs = Math.abs(value);
+  const Icon = abs < 0.05 ? Minus : value > 0 ? ArrowUpRight : ArrowDownRight;
+  const tone =
+    abs < 0.05
+      ? "text-ink-soft bg-black/5"
+      : value > 0
+        ? "text-pasture-700 bg-pasture-100"
+        : "text-danger-600 bg-danger-100";
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold tnum ${tone}`}
+    >
+      <Icon size={13} />
+      {abs.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%
+    </span>
+  );
+}
+
+/** Miniatura da evolução das medições diárias do animal. */
+function Sparkline({ totals }: { totals: { date: string; liters: number }[] }) {
+  if (totals.length < 2) return null;
+  const data = [...totals].reverse();
+  return (
+    <LineChart width={88} height={32} data={data} margin={{ top: 3, right: 2, bottom: 3, left: 2 }}>
+      <Line
+        type="monotone"
+        dataKey="liters"
+        stroke="#2F5233"
+        strokeWidth={1.5}
+        dot={false}
+        isAnimationActive={false}
+      />
+    </LineChart>
+  );
+}
 
 export default function RebanhoPage() {
   const { state } = useFarm();
@@ -136,29 +200,42 @@ export default function RebanhoPage() {
           <ul className="divide-y divide-black/5">
             {visible.map((a) => {
               const g = groupOf(state, a.id);
-              const recentTotals = recentAnimalDailyTotals(state, a.id);
+              const recentTotals = recentAnimalDailyTotals(state, a.id, 10);
+              const lastDay = recentTotals[0];
               return (
                 <li key={a.id}>
                   <Link
                     to={`/rebanho/${a.id}`}
-                    className="flex items-start gap-3 px-4 py-3 min-h-[72px] hover:bg-ink/[0.03] transition"
+                    className="flex items-center gap-3 px-4 py-3 min-h-[72px] hover:bg-ink/[0.03] transition"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium truncate">{a.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium truncate">{a.name}</p>
+                        <VariacaoChip value={variacao(recentTotals)} />
+                      </div>
                       <p className="text-sm text-ink-soft truncate tnum">
                         {a.tag ? `${a.tag} · ` : ""}
                         {g ? g.name : "Sem lote"}
                       </p>
-                      <p className="mt-0.5 text-xs text-ink-faint tnum">
-                        {recentTotals.length === 0
-                          ? "Sem medições individuais"
-                          : `Últimos controles · ${recentTotals
-                              .map((total) => `${formatDay(total.date)} ${formatLiters(total.liters)}`)
-                              .join(" · ")}`}
-                      </p>
+                      {lastDay ? (
+                        <p className="mt-0.5 text-xs text-ink-soft tnum">
+                          Recomendado{" "}
+                          <span className="font-medium text-ink">
+                            {fmt1(racaoRecomendada(lastDay.liters))} kg
+                          </span>{" "}
+                          de ração · último dia medido {formatLiters(lastDay.liters)}
+                        </p>
+                      ) : (
+                        <p className="mt-0.5 text-xs text-ink-faint tnum">
+                          Sem medições individuais
+                        </p>
+                      )}
                     </div>
-                    {a.status === "arquivado" && <Chip tone="neutro">arquivado</Chip>}
-                    <ChevronRight size={18} className="mt-1.5 text-ink-faint shrink-0" />
+                    <div className="shrink-0 flex flex-col items-end gap-1">
+                      <Sparkline totals={recentTotals} />
+                      {a.status === "arquivado" && <Chip tone="neutro">arquivado</Chip>}
+                    </div>
+                    <ChevronRight size={18} className="text-ink-faint shrink-0" />
                   </Link>
                 </li>
               );
