@@ -354,6 +354,26 @@ export function ReviewSheet({
         )
     );
   };
+  const unbindRow = (i: number) => {
+    touch();
+    setRows(
+      (rs) =>
+        rs &&
+        rs.map((r, j) =>
+          j === i
+            ? {
+                ...r,
+                animalId: null,
+                animalName: null,
+                probable: false,
+                acknowledged: false,
+                assignmentAction: undefined,
+                assignmentDecisionFor: undefined,
+              }
+            : r,
+        ),
+    );
+  };
   const ackRow = (i: number) => {
     touch();
     setRows(
@@ -859,6 +879,30 @@ export function ReviewSheet({
                                     (peer) => `“${peer.rawLabel}” (${peer.value} L)`,
                                   ).join(", ")}. Vincule uma das linhas ao Animal correto ou descarte a duplicada.
                                 </p>
+                                <label className="mt-2 block text-xs font-semibold">
+                                  Corrigir vínculo desta linha
+                                  <select
+                                    className={`${inputCls} mt-1 bg-white text-ink`}
+                                    value={r.animalId ?? ""}
+                                    onChange={(event) => {
+                                      const animal = state.animals.find(
+                                        (candidate) => candidate.id === event.target.value,
+                                      );
+                                      if (animal) bindRow(i, animal);
+                                      else unbindRow(i);
+                                    }}
+                                  >
+                                    <option value="">Outro Animal / cadastrar…</option>
+                                    {state.animals
+                                      .filter((animal) => animal.status === "ativo")
+                                      .sort((left, right) => left.name.localeCompare(right.name, "pt-BR"))
+                                      .map((animal) => (
+                                        <option key={animal.id} value={animal.id}>
+                                          {animal.name}{animal.tag ? ` · ${animal.tag}` : ""}
+                                        </option>
+                                      ))}
+                                  </select>
+                                </label>
                               </div>
                             </div>
                           )}
