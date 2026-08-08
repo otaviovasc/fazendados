@@ -38,6 +38,7 @@ import {
 import {
   assignmentReview,
   exactAnimalDuplicate,
+  milkControlFieldIsValid,
 } from "./reviewLogic";
 import {
   CONFIDENCE_DOT,
@@ -258,19 +259,24 @@ export function ReviewSheet({
 
   const fieldUnits = fields.filter((field) => field.key !== "rows");
   const activeRows = (rows ?? []).filter((row) => !row.discarded);
+  const fieldOk = (field: FieldReview) =>
+    (field.acknowledged || field.value !== field.original) &&
+    (proposal?.kind !== "controle_leiteiro" ||
+      milkControlFieldIsValid(field.key, field.value, resolvedGroup));
   const progress = {
     total: fieldUnits.length + activeRows.length,
-    done:
-      fieldUnits.filter(
-        (field) => field.acknowledged || field.value !== field.original,
-      ).length + activeRows.filter(rowOk).length,
+    done: fieldUnits.filter(fieldOk).length + activeRows.filter(rowOk).length,
   };
 
   if (!proposal) return null;
 
-  const groupOk = proposal.kind !== "controle_leiteiro" || Boolean(resolvedGroup);
+  const contextOk = proposal.kind !== "controle_leiteiro" ||
+    ["date", "group", "shift"].every((key) => {
+      const field = fieldUnits.find((candidate) => candidate.key === key);
+      return field && milkControlFieldIsValid(key, field.value, resolvedGroup);
+    });
   const hasMeasurementToConfirm = proposal.kind !== "controle_leiteiro" || activeRows.length > 0;
-  const allChecked = progress.done === progress.total && groupOk && hasMeasurementToConfirm;
+  const allChecked = progress.done === progress.total && contextOk && hasMeasurementToConfirm;
   const chosenMoves = (rows ?? []).filter((row) => {
     const review = assignmentFor(row);
     return (
@@ -544,6 +550,7 @@ export function ReviewSheet({
           value={f.value}
           onChange={(e) => updateField(f.key, e.target.value)}
         >
+          <option value="">Escolha a ordenha…</option>
           {shiftOptions.map((s) => (
             <option key={s} value={s}>
               {s}
@@ -661,7 +668,9 @@ export function ReviewSheet({
                 .filter((f) => f.key !== "rows")
                 .map((f) => {
                   const edited = f.value !== f.original;
-                  const checked = f.acknowledged || edited;
+                  const valid = proposal.kind !== "controle_leiteiro" ||
+                    milkControlFieldIsValid(f.key, f.value, resolvedGroup);
+                  const checked = valid && (f.acknowledged || edited);
                   return (
                     <div key={f.key}>
                       <div className="flex items-center gap-2 mb-1.5">
@@ -678,7 +687,7 @@ export function ReviewSheet({
                             editado por você
                           </span>
                         )}
-                        {!checked && (
+                        {!checked && valid && (
                           <button
                             onClick={() => ackField(f.key)}
                             className="ml-auto inline-flex items-center gap-1 rounded-full border border-pasture-500 text-pasture-700 px-3 min-h-[44px] text-xs font-semibold"
@@ -695,6 +704,15 @@ export function ReviewSheet({
                       <Field label="" hint={undefined}>
                         {renderFieldInput(f)}
                       </Field>
+                      {!valid && (
+                        <p className="mt-1 text-xs font-medium text-review-700" role="alert">
+                          {f.key === "shift"
+                            ? "Escolha a ordenha para continuar."
+                            : f.key === "group"
+                              ? "Escolha um Lote cadastrado para continuar."
+                              : "Informe uma data válida para continuar."}
+                        </p>
+                      )}
                       {edited && (
                         <p className="text-xs text-ink-faint mt-1">
                           valor original:{" "}

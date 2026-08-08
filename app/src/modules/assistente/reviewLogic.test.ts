@@ -8,6 +8,7 @@ import {
   assignmentOnDate,
   assignmentReview,
   exactAnimalDuplicate,
+  milkControlFieldIsValid,
 } from "./reviewLogic.ts";
 
 const groups: HerdGroup[] = [
@@ -58,3 +59,17 @@ const animals: Animal[] = [
 assert.equal(exactAnimalDuplicate(animals, "Guilhérmina", "")?.id, "guilhermina");
 assert.equal(exactAnimalDuplicate(animals, "Outra", "001")?.id, "guilhermina");
 assert.equal(exactAnimalDuplicate(animals, "Guilhermina", "002"), undefined);
+
+const oneMilkingGroup: HerdGroup = {
+  id: "lote-unico",
+  farmId: "farm-1",
+  name: "Lote 2",
+  milkingsPerDay: 1,
+};
+
+assert.equal(milkControlFieldIsValid("shift", "", oneMilkingGroup), false);
+assert.equal(
+  milkControlFieldIsValid("shift", "ordenha única", oneMilkingGroup),
+  true,
+);
+assert.equal(milkControlFieldIsValid("shift", "manhã", oneMilkingGroup), false);

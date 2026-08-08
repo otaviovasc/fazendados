@@ -11,6 +11,27 @@ export interface AssignmentReview {
   decisionKey: string | null;
 }
 
+/** Mantém a Revisão alinhada ao contrato aceito pelo comando no servidor. */
+export function milkControlFieldIsValid(
+  key: string,
+  value: string,
+  targetGroup: HerdGroup | undefined,
+): boolean {
+  if (key === "date") return /^\d{4}-\d{2}-\d{2}$/.test(value);
+  if (key === "group") {
+    return Boolean(
+      targetGroup && normalizeLabel(value) === normalizeLabel(targetGroup.name),
+    );
+  }
+  if (key !== "shift") return true;
+  if (!targetGroup) return false;
+
+  const shift = normalizeLabel(value);
+  return targetGroup.milkingsPerDay === 1
+    ? shift === "unica" || shift === "ordenha unica"
+    : shift === "manha" || shift === "tarde";
+}
+
 /** A Lotação inclui as datas `start` e `end`. */
 export function assignmentOnDate(
   assignments: AnimalGroupAssignment[],
