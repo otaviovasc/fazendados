@@ -40,6 +40,16 @@ módulo; tentativa gera evento de segurança sem vazar existência.
 
 ## Assistente
 
+### US-AI-07 — Organizar e reutilizar Anexos (`MUST`)
+
+Como Agrônomo operador, quero encontrar fotos e documentos já enviados em uma
+Galeria para visualizar, baixar, renomear, categorizar, remover e reutilizar
+um arquivo em uma nova Captura.
+
+**Aceite:** a Galeria respeita a Fazenda; imagens e PDFs são visualizáveis;
+remoção é auditada e não apaga a Captura original; reutilização cria uma nova
+Captura sem expor `storage_key`.
+
 ### US-AI-01 — Capturar por texto (`MUST`)
 
 Como Agrônomo operador, quero descrever um fato em linguagem natural para receber uma

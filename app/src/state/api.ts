@@ -116,6 +116,22 @@ export async function uploadAssistantPhoto(
   return body.capture;
 }
 
+export async function uploadAssistantFile(
+  file: File,
+  category: string,
+  text?: string,
+): Promise<AssistantCapture> {
+  const form = new FormData();
+  form.set("file", file);
+  form.set("category", category);
+  if (text?.trim()) form.set("text", text.trim());
+  const body = await request<{ capture: AssistantCapture }>("/api/assistant/captures/file", {
+    method: "POST",
+    body: form,
+  });
+  return body.capture;
+}
+
 /** Interpreta uma Captura já persistida, mantendo a mídia privada no servidor. */
 export async function interpretPersistedAssistantCapture(
   captureId: string,

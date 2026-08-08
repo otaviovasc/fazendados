@@ -15,7 +15,7 @@ semanticamente alinhados.
 | Análise leiteira | Comparar fatos confirmados sem extrapolar lacunas | Desempenho leiteiro, Cobertura, Tendência |
 | Alimentação | Registrar entradas e consumo | Alimento, Entrada, Trato, Item do trato, Saldo |
 | Financeiro | Registrar caixa previsto e realizado | Receita, Despesa, Liquidação |
-| Assistente | Converter entrada humana em proposta revisável | Captura, Anexo da Captura, Proposta, Revisão, Confirmação |
+| Assistente | Converter entrada humana em proposta revisável | Captura, Anexo da Captura, Galeria, Proposta, Revisão, Confirmação |
 
 ## Mapa conceitual
 
@@ -104,6 +104,7 @@ flowchart LR
 18. O Perímetro da Fazenda é um único polígono oficial por Fazenda, editável
     por comando explícito e auditado; sua ausência não é inferida da imagem.
 19. Ausência de Medição em um Turno permanece ausência: nunca vira zero.
+20. A Galeria é uma projeção dos Anexos da Captura; editar nome/categoria ou remover da Galeria nunca altera o fato operacional nem transforma um Anexo em Registro.
 
 ## Modelo relacional mínimo recomendado
 

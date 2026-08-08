@@ -24,7 +24,7 @@ import { loadFarmState } from './bootstrap.js';
 import { actionSchema, executeCommand } from './commands.js';
 import { ApiError } from './http.js';
 import { interpretAssistantCapture, readImageCapture } from './assistant.js';
-import { getPrivateImage, MAX_IMAGE_BYTES, privateImageKey, putPrivateImage, validateImageUpload } from './media.js';
+import { getPrivateImage, getPrivateObject, MAX_ATTACHMENT_BYTES, MAX_IMAGE_BYTES, privateAttachmentKey, privateImageKey, putPrivateImage, putPrivateObject, validateAttachmentUpload, validateImageUpload } from './media.js';
 import { uid } from '../lib/prng.js';
 import { errorType, logger } from './logger.js';
 import { toCapture, toProposal } from './mappers.js';
@@ -78,9 +78,12 @@ async function captureWithAttachments(farmId: string, captureId: string) {
   const db = getDb();
   const capture = (await db.select().from(assistantCaptures).where(and(eq(assistantCaptures.id, captureId), eq(assistantCaptures.farmId, farmId))).limit(1))[0];
   if (!capture) return null;
-  const attachments = await db.select().from(assistantCaptureAttachments).where(and(eq(assistantCaptureAttachments.captureId, capture.id), eq(assistantCaptureAttachments.farmId, farmId)));
+  const attachments = await db.select().from(assistantCaptureAttachments).where(and(eq(assistantCaptureAttachments.captureId, capture.id), eq(assistantCaptureAttachments.farmId, farmId), isNull(assistantCaptureAttachments.deletedAt)));
   return { capture, attachments };
 }
+
+const attachmentCategorySchema = z.enum(['controle_leiteiro', 'comprovante', 'nota_fiscal', 'financeiro', 'mapa', 'outro']);
+const attachmentName = (name: string) => name.replace(/[\\/\0]/g, '').trim().slice(0, 180) || 'Arquivo sem nome';
 
 export function createApp() {
   const app = new Hono<AppEnv>();
@@ -215,6 +218,10 @@ export function createApp() {
     const textValue = form?.get('text');
     const text = typeof textValue === 'string' ? textValue.trim() : '';
     if (text.length > 20_000) throw new ApiError(400, 'INVALID_CAPTURE', 'O texto da Captura deve ter no máximo 20.000 caracteres.');
+    const categoryValue = form?.get('category');
+    const category = attachmentCategorySchema.safeParse(typeof categoryValue === 'string' ? categoryValue : 'outro').success
+      ? String(categoryValue || 'outro')
+      : 'outro';
     const image = await validateImageUpload(candidate);
     const { user, farm } = c.get('auth');
     const captureId = uid('cap');
@@ -224,13 +231,59 @@ export function createApp() {
     try {
       const created = await getDb().transaction(async (tx) => {
         const inserted = (await tx.insert(assistantCaptures).values({ id: captureId, farmId: farm.id, text: text || null, extractedText: null, createdAt: new Date() }).returning())[0];
-        const attachment = (await tx.insert(assistantCaptureAttachments).values({ id: attachmentId, farmId: farm.id, captureId, kind: 'imagem', storageKey, mimeType: image.mimeType, byteSize: image.bytes.byteLength, durationMs: null, createdAt: new Date() }).returning())[0];
+        const attachment = (await tx.insert(assistantCaptureAttachments).values({ id: attachmentId, farmId: farm.id, captureId, kind: 'imagem', name: attachmentName(candidate.name), category, storageKey, mimeType: image.mimeType, byteSize: image.bytes.byteLength, durationMs: null, createdAt: new Date() }).returning())[0];
         await auditAssistantMutation(tx, farm.id, user.id, 'captura', 'captura', captureId, 'Foto original da Captura registrada.');
         return { capture: inserted, attachment };
       });
       return c.json({ capture: toCapture(created.capture, [created.attachment]) }, 201);
     } catch (error) {
       // Best effort: o binário nunca fica referenciado se a transação falhar.
+      void import('./media.js').then(({ deletePrivateObject }) => deletePrivateObject(storageKey));
+      throw error;
+    }
+  });
+
+  /** Upload genérico da Galeria: mantém a Captura original e organiza o arquivo por categoria. */
+  app.post('/api/assistant/captures/file', async (c) => {
+    const contentLength = Number(c.req.header('content-length') ?? 0);
+    if (Number.isFinite(contentLength) && contentLength > MAX_ATTACHMENT_BYTES + 256 * 1024) {
+      throw new ApiError(413, 'MEDIA_TOO_LARGE', 'O arquivo deve ter no máximo 25 MB.');
+    }
+    const form = await c.req.raw.formData().catch(() => null);
+    const candidate = form?.get('file');
+    if (!(candidate instanceof File)) throw new ApiError(400, 'INVALID_MEDIA', 'Envie um arquivo no campo file.');
+    const textValue = form?.get('text');
+    const text = typeof textValue === 'string' ? textValue.trim() : '';
+    if (text.length > 20_000) throw new ApiError(400, 'INVALID_CAPTURE', 'O texto da Captura deve ter no máximo 20.000 caracteres.');
+    const parsedCategory = attachmentCategorySchema.safeParse(String(form?.get('category') ?? 'outro'));
+    if (!parsedCategory.success) throw new ApiError(400, 'INVALID_ATTACHMENT_CATEGORY', 'Categoria de arquivo inválida.');
+    const uploaded = await validateAttachmentUpload(candidate);
+    const { user, farm } = c.get('auth');
+    const captureId = uid('cap');
+    const attachmentId = uid('att');
+    const storageKey = privateAttachmentKey(farm.id, captureId, attachmentId, uploaded.extension);
+    await putPrivateObject(storageKey, uploaded);
+    try {
+      const created = await getDb().transaction(async (tx) => {
+        const capture = (await tx.insert(assistantCaptures).values({ id: captureId, farmId: farm.id, text: text || null, extractedText: null, createdAt: new Date() }).returning())[0];
+        const attachment = (await tx.insert(assistantCaptureAttachments).values({
+          id: attachmentId,
+          farmId: farm.id,
+          captureId,
+          kind: uploaded.kind,
+          name: attachmentName(candidate.name),
+          category: parsedCategory.data,
+          storageKey,
+          mimeType: uploaded.mimeType,
+          byteSize: uploaded.bytes.byteLength,
+          durationMs: null,
+          createdAt: new Date(),
+        }).returning())[0];
+        await auditAssistantMutation(tx, farm.id, user.id, 'captura', 'captura', captureId, 'Arquivo organizado na Galeria.');
+        return { capture, attachment };
+      });
+      return c.json({ capture: toCapture(created.capture, [created.attachment]) }, 201);
+    } catch (error) {
       void import('./media.js').then(({ deletePrivateObject }) => deletePrivateObject(storageKey));
       throw error;
     }
@@ -313,11 +366,12 @@ export function createApp() {
       .where(and(eq(assistantCaptureAttachments.id, c.req.param('attachmentId')), eq(assistantCaptureAttachments.captureId, c.req.param('captureId')), eq(assistantCaptureAttachments.farmId, farm.id), eq(assistantCaptures.farmId, farm.id)))
       .limit(1))[0]?.attachment;
     if (!attachment) throw new ApiError(404, 'ATTACHMENT_NOT_FOUND', 'Anexo não encontrado.');
-    if (attachment.mimeType !== 'image/jpeg' && attachment.mimeType !== 'image/png' && attachment.mimeType !== 'image/webp') throw new ApiError(400, 'INVALID_MEDIA', 'Este anexo não pode ser exibido como foto.');
-    const image = await getPrivateImage(attachment.storageKey, attachment.mimeType);
+    const bytes = await getPrivateObject(attachment.storageKey);
     c.header('Cache-Control', 'private, no-store');
     c.header('X-Content-Type-Options', 'nosniff');
-    return c.body(image.bytes, 200, { 'Content-Type': image.mimeType, 'Content-Length': String(image.bytes.byteLength) });
+    const disposition = c.req.query('download') === '1' ? 'attachment' : 'inline';
+    c.header('Content-Disposition', `${disposition}; filename*=UTF-8''${encodeURIComponent(attachment.name)}`);
+    return c.body(bytes, 200, { 'Content-Type': attachment.mimeType, 'Content-Length': String(bytes.byteLength) });
   });
 
   /**

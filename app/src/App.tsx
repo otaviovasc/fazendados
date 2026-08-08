@@ -8,6 +8,7 @@ import {
   Map as MapIcon,
   Wheat,
   Wallet,
+  Images,
 } from "lucide-react";
 import { useFarm, pendingProposals } from "./state/store";
 import InicioPage from "./modules/inicio";
@@ -19,6 +20,7 @@ import AnalisePage from "./modules/analise";
 import MapaPage from "./modules/mapa";
 import EstoquePage from "./modules/estoque";
 import FinanceiroPage from "./modules/financeiro";
+import GaleriaPage from "./modules/galeria";
 
 const NAV = [
   { to: "/", label: "Início", icon: Home, end: true },
@@ -29,6 +31,7 @@ const NAV = [
   { to: "/mapa", label: "Mapa", icon: MapIcon },
   { to: "/estoque", label: "Estoque", icon: Wheat },
   { to: "/financeiro", label: "Caixa", icon: Wallet },
+  { to: "/galeria", label: "Galeria", icon: Images },
 ];
 
 // Mobile: 5 atalhos principais na barra inferior; restante no menu lateral (desktop) e "mais".
@@ -83,6 +86,7 @@ export default function App() {
             <Route path="/mapa" element={<MapaPage />} />
             <Route path="/estoque" element={<EstoquePage />} />
             <Route path="/financeiro" element={<FinanceiroPage />} />
+            <Route path="/galeria" element={<GaleriaPage />} />
           </Routes>
         </div>
       </main>

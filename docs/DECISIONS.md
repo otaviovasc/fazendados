@@ -275,6 +275,15 @@ repetido sempre bloqueia novo cadastro. Nome normalizado repetido bloqueia
 quando um dos Animais não tem brinco; dois Animais com o mesmo nome só podem
 coexistir quando ambos possuem brincos não vazios e distintos.
 
+### D-039 — Galeria de Anexos reutilizáveis
+
+A Galeria é uma view autenticada dos Anexos da Captura ativos da Fazenda. Cada
+Anexo possui nome e categoria editáveis; imagens e PDFs podem ser
+visualizados/baixados; remoção é um arquivamento auditado, preservando a
+Captura original e sem apagar fatos. Reutilizar um Anexo no Assistente cria uma
+nova Captura apontando para o mesmo objeto privado e mantém o fluxo Captura →
+Proposta → Revisão → Confirmação. O `storage_key` nunca é exposto à UI.
+
 ## Pendentes
 
 | ID | Decisão | Recomendação atual |

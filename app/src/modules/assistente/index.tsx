@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
+  AudioLines,
   Camera,
   CheckCircle2,
   ImagePlus,
+  Images,
   Inbox,
   LoaderCircle,
   Send,
@@ -11,7 +13,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import type { AssistantProposal } from "../../domain/types";
+import type { AssistantCapture, AssistantCaptureAttachment, AssistantProposal } from "../../domain/types";
 import { captureOf, pendingProposals, useFarm } from "../../state/store";
 import {
   createAssistantTextCapture,
@@ -28,6 +30,7 @@ import {
   InlineError,
   PageHeader,
   SectionTitle,
+  Sheet,
 } from "../../components/ui";
 import { ReviewSheet } from "./ReviewSheet";
 import { CorrectSheet, type CorrectionTarget } from "../leite/CorrectSheet";
@@ -40,20 +43,22 @@ import {
   formatWhen,
   sortAssistantHistory,
 } from "./helpers";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 interface Toast {
   message: string;
 }
 
 export default function AssistentePage() {
-  const { state, syncAssistantInterpretation } = useFarm();
+  const { state, dispatch, syncAssistantInterpretation } = useFarm();
   const navigate = useNavigate();
   const [text, setText] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoCaptureId, setPhotoCaptureId] = useState<string | null>(null);
   const [photoStage, setPhotoStage] = useState<"idle" | "uploading" | "reading" | "interpreting">("idle");
+  const [storedAttachment, setStoredAttachment] = useState<AssistantCaptureAttachment | null>(null);
+  const [galleryOpen, setGalleryOpen] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [reviewId, setReviewId] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -65,6 +70,8 @@ export default function AssistentePage() {
 
   const pending = pendingProposals(state);
   const history = sortAssistantHistory(state, state.proposals);
+  const savedAttachments = state.captures.flatMap((capture) => (capture.attachments ?? []).filter((attachment) => !attachment.deletedAt));
+  const storedNeedsText = Boolean(storedAttachment && storedAttachment.kind !== "imagem" && !text.trim());
 
   const submit = async () => {
     const t = text.trim();
@@ -89,6 +96,18 @@ export default function AssistentePage() {
     setPhotoPreview(null);
     setPhotoCaptureId(null);
     setPhotoError(null);
+    setPhotoStage("idle");
+    setStoredAttachment(null);
+  };
+
+  const selectStoredAttachment = (attachment: AssistantCaptureAttachment) => {
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhoto(null);
+    setPhotoPreview(null);
+    setPhotoCaptureId(null);
+    setStoredAttachment(attachment);
+    setPhotoError(null);
+    setGalleryOpen(false);
     setPhotoStage("idle");
   };
 
@@ -140,6 +159,38 @@ export default function AssistentePage() {
     }
   };
 
+  const submitStoredAttachment = async () => {
+    if (!storedAttachment || photoStage !== "idle") return;
+    if (storedNeedsText) {
+      setPhotoError("Para reutilizar PDF ou áudio, escreva uma observação no campo acima para o Assistente interpretar.");
+      return;
+    }
+    setPhotoError(null);
+    try {
+      setPhotoStage("uploading");
+      const outcome = await dispatch({
+        type: "CreateAssistantCaptureFromAttachment",
+        attachmentId: storedAttachment.id,
+        text: text.trim() || undefined,
+      });
+      if (!outcome.ok) throw new Error(outcome.message);
+      const capture = (outcome.result as { capture: AssistantCapture }).capture;
+      syncAssistantInterpretation({ capture, proposals: [] });
+      if (storedAttachment.kind === "imagem" && !capture.extractedText) {
+        setPhotoStage("reading");
+        await readAssistantPhoto(capture.id);
+      }
+      setPhotoStage("interpreting");
+      const result = await interpretPersistedAssistantCapture(capture.id);
+      syncAssistantInterpretation(result);
+      setText("");
+      clearPhoto();
+    } catch (error) {
+      setPhotoError(error instanceof Error ? error.message : "Não foi possível usar o arquivo.");
+      setPhotoStage("idle");
+    }
+  };
+
   useEffect(() => () => {
     if (photoPreview) URL.revokeObjectURL(photoPreview);
   }, [photoPreview]);
@@ -163,6 +214,7 @@ export default function AssistentePage() {
       <PageHeader
         title="Assistente"
         subtitle="Escreva o que aconteceu; revise antes de virar Registro."
+        action={<Link to="/galeria" className="inline-flex items-center justify-center min-h-[44px] rounded-xl bg-pasture-100 text-pasture-700 px-3 text-sm font-semibold">Abrir Galeria</Link>}
       />
 
       {/* Legenda das naturezas de dado */}
@@ -241,13 +293,30 @@ export default function AssistentePage() {
               </button>
             </div>
           </div>
+        ) : storedAttachment ? (
+          <div className="mt-3 rounded-2xl border border-black/10 bg-ink/[0.02] p-3">
+            <div className="flex gap-3 items-center">
+              <div className="size-20 rounded-xl bg-paper-sunken grid place-items-center text-ink-faint shrink-0">
+                {storedAttachment.kind === "imagem" ? <img src={captureAttachmentUrl(storedAttachment.captureId, storedAttachment.id)} alt={storedAttachment.name ?? "Arquivo salvo"} className="size-full object-cover rounded-xl" /> : storedAttachment.kind === "audio" ? <AudioLines size={26} /> : <Images size={26} />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium truncate">{storedAttachment.name ?? "Arquivo salvo"}</p>
+                <p className="text-xs text-ink-soft mt-1">Arquivo salvo na Galeria · será reutilizado como nova Captura.</p>
+              </div>
+              <button type="button" onClick={clearPhoto} disabled={photoStage !== "idle"} aria-label="Remover arquivo salvo" className="min-h-[44px] min-w-[44px] grid place-items-center rounded-xl text-ink-soft hover:bg-ink/5 disabled:opacity-50"><Trash2 size={17} /></button>
+            </div>
+            {storedNeedsText && <p className="text-xs text-review-700 mt-2">PDFs e áudios são guardados como fonte; escreva uma observação acima para gerar a Proposta.</p>}
+          </div>
         ) : (
-          <div className="grid grid-cols-2 gap-2 mt-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
             <Button variant="secondary" type="button" onClick={() => cameraInput.current?.click()}>
               <Camera size={16} /> Tirar foto
             </Button>
             <Button variant="secondary" type="button" onClick={() => galleryInput.current?.click()}>
               <ImagePlus size={16} /> Galeria
+            </Button>
+            <Button variant="secondary" type="button" onClick={() => setGalleryOpen(true)}>
+              <Images size={16} /> Salvos
             </Button>
           </div>
         )}
@@ -257,25 +326,32 @@ export default function AssistentePage() {
         {interpretError && <div className="mt-3"><InlineError>{interpretError}</InlineError></div>}
         {photoError && <div className="mt-3"><InlineError>{photoError}</InlineError></div>}
         <div className="flex items-center gap-2 mt-3">
-          {photo && (
+          {(photo || storedAttachment) && (
             <Button
               variant="secondary"
-              disabled={photoStage !== "idle"}
-              onClick={() => void submitPhoto()}
+              disabled={photoStage !== "idle" || storedNeedsText}
+              onClick={() => void (photo ? submitPhoto() : submitStoredAttachment())}
             >
               {photoStage !== "idle" && <LoaderCircle size={15} className="animate-spin" />}
-              {photoStage === "uploading" ? "Enviando foto…" : photoStage === "reading" ? "Lendo foto…" : photoStage === "interpreting" ? "Interpretando…" : photoCaptureId ? "Tentar novamente" : "Ler foto"}
+              {photoStage === "uploading" ? "Preparando arquivo…" : photoStage === "reading" ? "Lendo arquivo…" : photoStage === "interpreting" ? "Interpretando…" : photoCaptureId ? "Tentar novamente" : "Usar arquivo"}
             </Button>
           )}
           <Button
             className="ml-auto"
-            disabled={!text.trim() || interpreting || photoStage !== "idle" || Boolean(photo)}
+            disabled={!text.trim() || interpreting || photoStage !== "idle" || Boolean(photo) || Boolean(storedAttachment)}
             onClick={submit}
           >
             <Send size={15} /> {interpreting ? "Interpretando…" : "Gerar proposta"}
           </Button>
         </div>
       </Card>
+
+      <SavedAttachmentSheet
+        open={galleryOpen}
+        attachments={savedAttachments}
+        onClose={() => setGalleryOpen(false)}
+        onSelect={selectStoredAttachment}
+      />
 
       <div className="grid gap-8 lg:grid-cols-2">
         {/* Propostas pendentes */}
@@ -468,5 +544,41 @@ export default function AssistentePage() {
         </div>
       )}
     </div>
+  );
+}
+
+function SavedAttachmentSheet({
+  open,
+  attachments,
+  onClose,
+  onSelect,
+}: {
+  open: boolean;
+  attachments: AssistantCaptureAttachment[];
+  onClose: () => void;
+  onSelect: (attachment: AssistantCaptureAttachment) => void;
+}) {
+  return (
+    <Sheet open={open} onClose={onClose} title="Usar arquivo salvo">
+      {attachments.length === 0 ? (
+        <EmptyState icon={<Images size={28} />} title="Nenhum arquivo salvo" hint="Adicione fotos ou documentos na Galeria para reutilizá-los aqui." />
+      ) : (
+        <div className="space-y-2">
+          <p className="text-sm text-ink-soft mb-3">Escolha uma Captura já guardada. O arquivo será usado em uma nova Revisão.</p>
+          {attachments.map((attachment) => (
+            <button key={attachment.id} type="button" onClick={() => onSelect(attachment)} className="w-full flex items-center gap-3 rounded-xl border border-black/5 p-3 text-left hover:bg-ink/[0.03] min-h-[64px]">
+              <div className="size-12 rounded-lg bg-paper-sunken grid place-items-center overflow-hidden shrink-0">
+                {attachment.kind === "imagem" ? <img src={captureAttachmentUrl(attachment.captureId, attachment.id)} alt="" className="size-full object-cover" /> : attachment.kind === "audio" ? <AudioLines size={21} className="text-ink-faint" /> : <Images size={21} className="text-ink-faint" />}
+              </div>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium truncate">{attachment.name ?? "Arquivo salvo"}</span>
+                <span className="block text-xs text-ink-faint mt-0.5">{attachment.kind === "imagem" ? "Imagem" : attachment.kind === "audio" ? "Áudio" : "Documento"}</span>
+              </span>
+              <ArrowRight size={16} className="text-ink-faint" />
+            </button>
+          ))}
+        </div>
+      )}
+    </Sheet>
   );
 }

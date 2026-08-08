@@ -406,11 +406,15 @@ export const assistantCaptureAttachments = pgTable(
     id: text('id').primaryKey(),
     farmId: text('farm_id').notNull(),
     captureId: text('capture_id').notNull(),
+    sourceAttachmentId: text('source_attachment_id'),
     kind: text('kind').notNull(), // "audio" | "imagem" | "documento"
+    name: text('name').notNull().default('Arquivo sem nome'),
+    category: text('category').notNull().default('outro'),
     storageKey: text('storage_key').notNull(),
     mimeType: text('mime_type').notNull(),
     byteSize: integer('byte_size').notNull(),
     durationMs: integer('duration_ms'),
+    deletedAt: timestamp('deleted_at', { withTimezone: true, mode: 'date' }),
     ...standardTimestamps(),
   },
   (t) => [
@@ -420,6 +424,8 @@ export const assistantCaptureAttachments = pgTable(
       name: 'assistant_capture_attachments_farm_capture_fk',
     }),
     index('assistant_capture_attachments_farm_capture_idx').on(t.farmId, t.captureId),
+    index('assistant_capture_attachments_gallery_idx').on(t.farmId, t.category, t.deletedAt),
+    index('assistant_capture_attachments_source_idx').on(t.farmId, t.sourceAttachmentId),
   ],
 );
 

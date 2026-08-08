@@ -13,6 +13,7 @@ import type {
   Animal,
   AnimalGroupAssignment,
   AssistantCapture,
+  AssistantCaptureAttachment,
   AssistantProposal,
   DailyMilkProduction,
   FarmState,
@@ -116,6 +117,7 @@ type CommandResult = {
   financialEntry?: FinancialEntry;
   farmBoundary?: FarmBoundary;
   capture?: AssistantCapture;
+  attachment?: AssistantCaptureAttachment;
   proposal?: AssistantProposal;
   proposals?: AssistantProposal[];
 };
@@ -141,7 +143,12 @@ export function applyCommandResult(s: FarmState, a: Action, result: unknown): Fa
   if (r.financialEntry)
     next = { ...next, financialEntries: upsertById(next.financialEntries, r.financialEntry) };
   if (r.farmBoundary) next = { ...next, farmBoundary: r.farmBoundary };
-  if (r.capture) next = { ...next, captures: [r.capture, ...next.captures] };
+  if (r.capture) next = {
+    ...next,
+    captures: next.captures.some((capture) => capture.id === r.capture!.id)
+      ? upsertById(next.captures, r.capture)
+      : [r.capture, ...next.captures],
+  };
   if (r.proposals) {
     next = r.proposals.reduce(
       (state, proposal) => ({
@@ -157,6 +164,20 @@ export function applyCommandResult(s: FarmState, a: Action, result: unknown): Fa
     next = next.proposals.some((p) => p.id === r.proposal!.id)
       ? { ...next, proposals: upsertById(next.proposals, r.proposal) }
       : { ...next, proposals: [r.proposal, ...next.proposals] };
+  }
+  if (r.attachment) {
+    next = {
+      ...next,
+      captures: next.captures.map((capture) => {
+        if (!capture.attachments?.some((attachment) => attachment.id === r.attachment!.id)) return capture;
+        return {
+          ...capture,
+          attachments: capture.attachments.map((attachment) =>
+            attachment.id === r.attachment!.id ? r.attachment! : attachment,
+          ),
+        };
+      }),
+    };
   }
 
   // Efeitos colaterais que o servidor aplica na mesma transação e que o

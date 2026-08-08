@@ -29,6 +29,20 @@
       "when": 1785939627348,
       "tag": "0003_standard_timestamps",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785940000000,
+      "tag": "0004_gallery_metadata",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785940100000,
+      "tag": "0005_gallery_provenance",
+      "breakpoints": true
     }
   ]
 }

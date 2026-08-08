@@ -1,6 +1,7 @@
 import { PageHeader } from "../../components/ui";
 import { EvolucaoProducao } from "./EvolucaoProducao";
 import { ComparacaoIndividual } from "./ComparacaoIndividual";
+import { BusinessIntelligence } from "./BusinessIntelligence";
 
 export default function AnalisePage() {
   return (
@@ -10,6 +11,7 @@ export default function AnalisePage() {
         subtitle="Leitura factual dos registros — ausência de medição nunca vira zero."
       />
       <div className="space-y-8">
+        <BusinessIntelligence />
         <EvolucaoProducao />
         <ComparacaoIndividual />
       </div>

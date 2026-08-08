@@ -4,6 +4,7 @@ import type {
   AnimalStatus,
   AssistantCapture,
   AssistantCaptureAttachment,
+  AssistantAttachmentCategory,
   AssistantProposal,
   AuditEvent,
   DailyMilkProduction,
@@ -200,12 +201,15 @@ export const toCaptureAttachment = (r: Row<typeof assistantCaptureAttachments>):
   id: r.id,
   farmId: r.farmId,
   captureId: r.captureId,
+  sourceAttachmentId: r.sourceAttachmentId ?? undefined,
   kind: r.kind as AssistantCaptureAttachment['kind'],
-  storageKey: r.storageKey,
+  name: r.name,
+  category: r.category as AssistantAttachmentCategory,
   mimeType: r.mimeType,
   byteSize: r.byteSize,
   durationMs: r.durationMs ?? undefined,
   createdAt: r.createdAt.toISOString(),
+  deletedAt: r.deletedAt?.toISOString(),
 });
 
 export const toCapture = (

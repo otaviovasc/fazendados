@@ -1,4 +1,4 @@
-import { asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import {
   animalGroupAssignments,
@@ -119,7 +119,7 @@ export async function loadFarmState(db: Db, farmId: string): Promise<FarmState> 
       ? db.select().from(assistantProposals).where(inArray(assistantProposals.captureId, captureIds)).orderBy(asc(assistantProposals.id))
       : [],
     captureIds.length
-      ? db.select().from(assistantCaptureAttachments).where(inArray(assistantCaptureAttachments.captureId, captureIds)).orderBy(asc(assistantCaptureAttachments.id))
+      ? db.select().from(assistantCaptureAttachments).where(and(eq(assistantCaptureAttachments.farmId, farmId), inArray(assistantCaptureAttachments.captureId, captureIds))).orderBy(asc(assistantCaptureAttachments.id))
       : [],
   ]);
 

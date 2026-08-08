@@ -3,7 +3,19 @@ import { env } from './env.js';
 import { ApiError } from './http.js';
 
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 export type SupportedImage = { bytes: Uint8Array; mimeType: 'image/jpeg' | 'image/png' | 'image/webp'; extension: 'jpg' | 'png' | 'webp' };
+export type SupportedAttachment = SupportedImage & { kind: 'imagem' } | {
+  bytes: Uint8Array;
+  mimeType: 'application/pdf';
+  extension: 'pdf';
+  kind: 'documento';
+} | {
+  bytes: Uint8Array;
+  mimeType: 'audio/webm' | 'audio/mpeg' | 'audio/wav' | 'audio/mp4' | 'audio/ogg' | 'audio/x-m4a';
+  extension: 'webm' | 'mp3' | 'wav' | 'm4a' | 'ogg';
+  kind: 'audio';
+};
 
 function detectedImage(bytes: Uint8Array): Pick<SupportedImage, 'mimeType' | 'extension'> | null {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return { mimeType: 'image/jpeg', extension: 'jpg' };
@@ -20,6 +32,33 @@ export async function validateImageUpload(file: File): Promise<SupportedImage> {
   if (!image) throw new ApiError(400, 'INVALID_MEDIA', 'Envie uma foto JPEG, PNG ou WebP válida.');
   if (file.type && file.type !== image.mimeType) throw new ApiError(400, 'INVALID_MEDIA', 'O tipo informado da foto não corresponde ao arquivo.');
   return { bytes, ...image };
+}
+
+function detectedPdf(bytes: Uint8Array): boolean {
+  return bytes.length >= 5 && new TextDecoder().decode(bytes.slice(0, 5)) === '%PDF-';
+}
+
+/** Upload de Galeria: imagem, PDF ou áudio. O Assistente interpreta imagens após OCR. */
+export async function validateAttachmentUpload(file: File): Promise<SupportedAttachment> {
+  if (file.size === 0) throw new ApiError(400, 'INVALID_MEDIA', 'O arquivo está vazio.');
+  if (file.size > MAX_ATTACHMENT_BYTES) throw new ApiError(413, 'MEDIA_TOO_LARGE', 'O arquivo deve ter no máximo 25 MB.');
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const image = detectedImage(bytes);
+  if (image) return { bytes, ...image, kind: 'imagem' };
+  if (detectedPdf(bytes) && (!file.type || file.type === 'application/pdf')) {
+    return { bytes, mimeType: 'application/pdf', extension: 'pdf', kind: 'documento' };
+  }
+  const audioExtensions: Record<string, 'webm' | 'mp3' | 'wav' | 'm4a' | 'ogg'> = {
+    'audio/webm': 'webm',
+    'audio/mpeg': 'mp3',
+    'audio/wav': 'wav',
+    'audio/mp4': 'm4a',
+    'audio/x-m4a': 'm4a',
+    'audio/ogg': 'ogg',
+  };
+  const audioExtension = audioExtensions[file.type];
+  if (audioExtension) return { bytes, mimeType: file.type as 'audio/webm' | 'audio/mpeg' | 'audio/wav' | 'audio/mp4' | 'audio/ogg' | 'audio/x-m4a', extension: audioExtension, kind: 'audio' };
+  throw new ApiError(400, 'INVALID_MEDIA', 'Envie uma imagem JPEG, PNG, WebP, PDF ou áudio compatível.');
 }
 
 type BucketConfig = { endpoint: URL; bucket: string; accessKeyId: string; secretAccessKey: string; region: string };
@@ -78,6 +117,16 @@ export async function putPrivateImage(key: string, image: SupportedImage) {
   if (!response.ok) throw new ApiError(502, 'MEDIA_STORAGE_FAILED', 'Não foi possível guardar a foto agora. Tente novamente.');
 }
 
+export async function putPrivateObject(key: string, object: { bytes: Uint8Array; mimeType: string }) {
+  let response: Response;
+  try {
+    response = await signedRequest('PUT', key, object.bytes, object.mimeType);
+  } catch {
+    throw new ApiError(502, 'MEDIA_STORAGE_FAILED', 'Não foi possível guardar o arquivo agora. Tente novamente.');
+  }
+  if (!response.ok) throw new ApiError(502, 'MEDIA_STORAGE_FAILED', 'Não foi possível guardar o arquivo agora. Tente novamente.');
+}
+
 export async function getPrivateImage(key: string, expectedMimeType: SupportedImage['mimeType']): Promise<SupportedImage> {
   let response: Response;
   try {
@@ -92,10 +141,25 @@ export async function getPrivateImage(key: string, expectedMimeType: SupportedIm
   return { bytes, ...detected };
 }
 
+export async function getPrivateObject(key: string): Promise<Uint8Array> {
+  let response: Response;
+  try {
+    response = await signedRequest('GET', key);
+  } catch {
+    throw new ApiError(502, 'MEDIA_STORAGE_FAILED', 'Não foi possível ler o arquivo agora. Tente novamente.');
+  }
+  if (!response.ok) throw new ApiError(502, 'MEDIA_STORAGE_FAILED', 'Não foi possível ler o arquivo agora. Tente novamente.');
+  return new Uint8Array(await response.arrayBuffer());
+}
+
 export async function deletePrivateObject(key: string) {
   try { await signedRequest('DELETE', key); } catch { /* a captura pendente será limpa por retenção operacional */ }
 }
 
 export function privateImageKey(farmId: string, captureId: string, attachmentId: string, extension: SupportedImage['extension']) {
+  return `assistant-captures/${farmId}/${captureId}/${attachmentId}.${extension}`;
+}
+
+export function privateAttachmentKey(farmId: string, captureId: string, attachmentId: string, extension: 'jpg' | 'png' | 'webp' | 'pdf' | 'webm' | 'mp3' | 'wav' | 'm4a' | 'ogg') {
   return `assistant-captures/${farmId}/${captureId}/${attachmentId}.${extension}`;
 }

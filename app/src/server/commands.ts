@@ -4,6 +4,7 @@ import type { Tx } from '../db/client.js';
 import {
   animalGroupAssignments,
   animals,
+  assistantCaptureAttachments,
   assistantCaptures,
   assistantProposals,
   auditEvents,
@@ -31,6 +32,7 @@ import {
   toAnimal,
   toAssignment,
   toCapture,
+  toCaptureAttachment,
   toDailyMilkProduction,
   toFeedEntry,
   toFeedingEvent,
@@ -193,6 +195,21 @@ export const actionSchema = z.discriminatedUnion('type', [
     type: z.literal('CreateAssistantCapture'),
     text: z.string().min(1),
     proposals: z.array(proposalInput).min(1).max(8),
+  }),
+  z.object({
+    type: z.literal('CreateAssistantCaptureFromAttachment'),
+    attachmentId: z.string().min(1),
+    text: z.string().trim().max(20_000).optional(),
+  }),
+  z.object({
+    type: z.literal('UpdateAssistantAttachment'),
+    attachmentId: z.string().min(1),
+    name: z.string().trim().min(1).max(180),
+    category: z.enum(['controle_leiteiro', 'comprovante', 'nota_fiscal', 'financeiro', 'mapa', 'outro']),
+  }),
+  z.object({
+    type: z.literal('DeleteAssistantAttachment'),
+    attachmentId: z.string().min(1),
   }),
   z.object({
     type: z.literal('ConfirmAssistantProposal'),
@@ -950,6 +967,75 @@ export async function executeCommand(tx: Tx, ctx: AuthContext, a: CommandAction)
         });
       }
       return { capture: toCapture(capture), proposals: proposals.map(toProposal) };
+    }
+
+    case 'CreateAssistantCaptureFromAttachment': {
+      const source = (await tx
+        .select({ attachment: assistantCaptureAttachments, capture: assistantCaptures })
+        .from(assistantCaptureAttachments)
+        .innerJoin(assistantCaptures, and(eq(assistantCaptureAttachments.captureId, assistantCaptures.id), eq(assistantCaptureAttachments.farmId, assistantCaptures.farmId)))
+        .where(and(eq(assistantCaptureAttachments.id, a.attachmentId), eq(assistantCaptureAttachments.farmId, farmId), isNull(assistantCaptureAttachments.deletedAt)))
+        .limit(1))[0];
+      if (!source) throw notFound('ATTACHMENT_NOT_FOUND', 'Arquivo não encontrado na Galeria.');
+      const capture = (await tx.insert(assistantCaptures).values({
+        id: uid('cap'),
+        farmId,
+        text: a.text?.trim() || source.capture.text,
+        extractedText: source.capture.extractedText,
+        createdAt: new Date(),
+      }).returning())[0];
+      const attachment = (await tx.insert(assistantCaptureAttachments).values({
+        id: uid('att'),
+        farmId,
+        captureId: capture.id,
+        sourceAttachmentId: source.attachment.id,
+        kind: source.attachment.kind,
+        name: source.attachment.name ?? 'Arquivo sem nome',
+        category: source.attachment.category ?? 'outro',
+        storageKey: source.attachment.storageKey,
+        mimeType: source.attachment.mimeType,
+        byteSize: source.attachment.byteSize,
+        durationMs: source.attachment.durationMs,
+        createdAt: new Date(),
+      }).returning())[0];
+      await audit(tx, ctx, {
+        action: 'captura',
+        entityType: 'captura',
+        entityId: capture.id,
+        description: `Arquivo ${source.attachment.name ?? 'sem nome'} reutilizado na Galeria`,
+        origin: 'manual',
+      });
+      return { capture: toCapture(capture, [attachment]), attachment: toCaptureAttachment(attachment) };
+    }
+
+    case 'UpdateAssistantAttachment': {
+      const current = (await tx.select().from(assistantCaptureAttachments).where(and(eq(assistantCaptureAttachments.id, a.attachmentId), eq(assistantCaptureAttachments.farmId, farmId), isNull(assistantCaptureAttachments.deletedAt))).limit(1))[0];
+      if (!current) throw notFound('ATTACHMENT_NOT_FOUND', 'Arquivo não encontrado na Galeria.');
+      const updated = (await tx.update(assistantCaptureAttachments).set({ name: a.name, category: a.category }).where(and(eq(assistantCaptureAttachments.id, a.attachmentId), eq(assistantCaptureAttachments.farmId, farmId))).returning())[0];
+      await audit(tx, ctx, {
+        action: 'correcao',
+        entityType: 'anexo_captura',
+        entityId: a.attachmentId,
+        description: 'Metadados do arquivo atualizados na Galeria',
+        before: `${current.name} · ${current.category}`,
+        after: `${updated.name} · ${updated.category}`,
+        origin: 'manual',
+      });
+      return { attachment: toCaptureAttachment(updated) };
+    }
+
+    case 'DeleteAssistantAttachment': {
+      const current = (await tx.select().from(assistantCaptureAttachments).where(and(eq(assistantCaptureAttachments.id, a.attachmentId), eq(assistantCaptureAttachments.farmId, farmId), isNull(assistantCaptureAttachments.deletedAt))).limit(1))[0];
+      if (!current) throw notFound('ATTACHMENT_NOT_FOUND', 'Arquivo não encontrado na Galeria.');
+      const updated = (await tx.update(assistantCaptureAttachments).set({ deletedAt: new Date() }).where(and(eq(assistantCaptureAttachments.id, a.attachmentId), eq(assistantCaptureAttachments.farmId, farmId), isNull(assistantCaptureAttachments.deletedAt))).returning())[0];
+      await audit(tx, ctx, {
+        action: 'arquivamento',
+        entityType: 'anexo_captura',
+        entityId: a.attachmentId,
+        description: `Arquivo ${current.name} removido da Galeria`,
+        origin: 'manual',
+      });
+      return { attachment: toCaptureAttachment(updated) };
     }
 
     case 'ConfirmAssistantProposal': {

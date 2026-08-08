@@ -68,6 +68,7 @@
 | **Revisão** | Etapa humana de conferir e corrigir uma Proposta. | Aprovação automática |
 | **Confirmação** | Decisão humana que autoriza transformar uma Proposta em fatos do domínio. | Aceite da IA |
 | **Registro** | Fato persistido após comando manual ou Confirmação. | Captura, proposta |
+| **Galeria** | Visão operacional dos Anexos da Captura, com nome, categoria e origem, reutilizável pelo Assistente. | Pasta solta, arquivo público |
 
 ## Relações
 

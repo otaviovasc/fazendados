@@ -5,6 +5,7 @@ import type {
   InstallationType,
   LatLng,
   MilkingShift,
+  AssistantAttachmentCategory,
   ProposalField,
   ProposalKind,
 } from "../domain/types";
@@ -83,6 +84,9 @@ export type Action =
     }
   | { type: "SettleFinancialEntry"; entryId: string; date: string }
   | { type: "CreateAssistantCapture"; text: string; proposals: ProposalInput[] }
+  | { type: "CreateAssistantCaptureFromAttachment"; attachmentId: string; text?: string }
+  | { type: "UpdateAssistantAttachment"; attachmentId: string; name: string; category: AssistantAttachmentCategory }
+  | { type: "DeleteAssistantAttachment"; attachmentId: string }
   | {
       type: "ConfirmAssistantProposal";
       proposalId: string;

@@ -171,18 +171,30 @@ export type FactOrigin = "manual" | "assistente";
 
 /** Tipo do original anexado a uma Captura; bytes vivem no storage privado. */
 export type AssistantCaptureAttachmentKind = "audio" | "imagem" | "documento";
+export type AssistantAttachmentCategory =
+  | "controle_leiteiro"
+  | "comprovante"
+  | "nota_fiscal"
+  | "financeiro"
+  | "mapa"
+  | "outro";
 
 /** Metadados e referência privada do arquivo original, sem conteúdo binário. */
 export interface AssistantCaptureAttachment {
   id: string;
   farmId: string;
   captureId: string;
+  sourceAttachmentId?: string;
   kind: AssistantCaptureAttachmentKind;
-  storageKey: string;
+  name?: string;
+  category?: AssistantAttachmentCategory;
+  /** Chave privada nunca é enviada ao cliente; existe apenas no registro persistido. */
+  storageKey?: string;
   mimeType: string;
   byteSize: number;
   durationMs?: number;
   createdAt: ISODateTime;
+  deletedAt?: ISODateTime;
 }
 
 export interface AssistantCapture {

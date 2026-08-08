@@ -29,7 +29,8 @@ em uma visão confiável da evolução da Fazenda e de cada Animal.
 6. Receitas, Despesas, Liquidações e Resultado de caixa.
 7. Assistente com Captura → Proposta → Revisão → Confirmação.
 8. Busca, linhas do tempo e visualizações simples.
-9. Auditoria e observabilidade desde o primeiro comando.
+9. Galeria autenticada de Anexos, com categorização, consulta, reutilização e auditoria.
+10. Auditoria e observabilidade desde o primeiro comando.
 
 ### Fora do V1
 
