@@ -532,6 +532,36 @@ test('confirmação rejeita controle leiteiro sem turno explícito', async () =>
   );
 });
 
+test('deriva ordenha única quando o Lote possui uma ordenha por dia e a Revisão envia turno vazio', async () => {
+  const group = { id: 'group2', farmId: 'farm1', name: 'Lote 2', milkingsPerDay: 1 as const };
+  const animal = { id: 'animal1', farmId: 'farm1', name: 'Sardinha', tag: null, status: 'ativo' };
+  const tx = createMemoryTx({
+    proposal: proposal('controle_leiteiro', [
+      { key: 'date', value: '2026-07-11' },
+      { key: 'group', value: 'Lote 2' },
+      { key: 'shift', value: '' },
+    ]),
+    groups: [group],
+    animals: [animal],
+    assignments: [{ id: 'as1', animalId: animal.id, groupId: group.id, start: '2026-01-01', end: null }],
+  });
+
+  const result = await executeCommand(tx, auth, {
+    type: 'ConfirmAssistantProposal',
+    proposalId: tx.state.proposal.id,
+    fields: tx.state.proposal.fields,
+    bindings: [{ animalId: animal.id, liters: 9 }],
+  } satisfies CommandAction) as { facts: number; recordIds: string[] };
+
+  assert.equal(result.facts, 2);
+  assert.equal(
+    tx.state.audits.some((event: { description?: string }) =>
+      event.description?.includes('(Lote 2, 2026-07-11, unica)'),
+    ),
+    true,
+  );
+});
+
 test('confirma ordenha única do Lote 2 usando o rótulo exibido na Revisão', async () => {
   const group2 = { id: 'group2', farmId: 'farm1', name: 'Lote 2', milkingsPerDay: 1 as const };
   const animal = { id: 'animal1', farmId: 'farm1', name: 'Sardinha', tag: null, status: 'ativo' };

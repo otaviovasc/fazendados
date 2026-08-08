@@ -1303,9 +1303,14 @@ async function materializeAssistantProposal(
   if (proposal.kind === 'controle_leiteiro') {
     const date = reviewedDate(reviewedValue(fields, 'date'));
     const groupName = normalizeAssistantLabel(reviewedValue(fields, 'group'));
-    const shift = reviewedMilkingShift(reviewedValue(fields, 'shift'));
     const group = (await tx.select().from(herdGroups).where(eq(herdGroups.farmId, farmId)))
       .find((candidate) => normalizeAssistantLabel(candidate.name) === groupName);
+    const reviewedShift = reviewedValue(fields, 'shift');
+    // Em Lote de uma ordenha, "única" é o único turno permitido (D-020).
+    // Aceitar o vazio corrige Revisões abertas pela UI antiga, que mostrava a
+    // primeira opção do select sem gravá-la no estado.
+    const shift = reviewedMilkingShift(reviewedShift) ??
+      (reviewedShift === '' && group?.milkingsPerDay === 1 ? 'unica' : null);
     const rows = bindings ?? [];
     if (!date || !group || !shift || rows.length === 0) {
       throw badRequest('INVALID_PROPOSAL', 'Confira data, Lote, turno e medições do Controle leiteiro.');
