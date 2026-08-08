@@ -510,6 +510,43 @@ test('confirmação de controle leiteiro rejeita medição existente sem correç
   );
 });
 
+test('duplicidade no Controle identifica o Animal e as linhas conflitantes', async () => {
+  const tx = createMemoryTx({
+    proposal: proposal('controle_leiteiro', [
+      { key: 'date', value: '2026-07-28' },
+      { key: 'group', value: 'Lote 1' },
+      { key: 'shift', value: 'Tarde' },
+    ]),
+    groups: [{ id: 'group1', farmId: 'farm1', name: 'Lote 1', milkingsPerDay: 2 }],
+    animals: [{ id: 'fietao', farmId: 'farm1', name: 'Fietao', tag: '147', status: 'ativo' }],
+    assignments: [{ id: 'as1', animalId: 'fietao', groupId: 'group1', start: '2026-01-01', end: null }],
+  });
+
+  await assert.rejects(
+    executeCommand(tx, auth, {
+      type: 'ConfirmAssistantProposal',
+      proposalId: 'prop-controle_leiteiro',
+      fields: tx.state.proposal.fields,
+      bindings: [
+        { animalId: 'fietao', liters: 5, sourceLabel: '147' },
+        { animalId: 'fietao', liters: 11.5, sourceLabel: 'Fietao [147]' },
+      ],
+    } satisfies CommandAction),
+    (error: unknown) => {
+      assert.ok(error instanceof ApiError);
+      assert.equal(error.code, 'DUPLICATE_MEASUREMENT');
+      assert.match(error.message, /Fietao/);
+      assert.match(error.message, /“147” \(5 L\)/);
+      assert.match(error.message, /“Fietao \[147\]” \(11\.5 L\)/);
+      assert.equal(error.details?.inconsistency, 'duplicate_animal_measurement');
+      assert.equal(error.details?.duplicate_animal_ids, 'fietao');
+      return true;
+    },
+  );
+  assert.equal(tx.state.sessions.length, 0);
+  assert.equal(tx.state.measurements.length, 0);
+});
+
 test('confirmação rejeita controle leiteiro sem turno explícito', async () => {
   const tx = createMemoryTx({
     proposal: proposal('controle_leiteiro', [

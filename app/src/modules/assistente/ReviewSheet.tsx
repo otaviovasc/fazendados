@@ -37,6 +37,7 @@ import {
 } from "./matching";
 import {
   assignmentReview,
+  duplicateMeasurementAnimalIds,
   exactAnimalDuplicate,
   milkControlFieldIsValid,
 } from "./reviewLogic";
@@ -250,11 +251,18 @@ export function ReviewSheet({
     );
   };
 
+  const duplicateAnimalIds = duplicateMeasurementAnimalIds(rows ?? []);
+  const rowHasDuplicateAnimal = (r: RowReview) =>
+    !r.discarded &&
+    r.animalId !== null &&
+    duplicateAnimalIds.has(r.animalId);
+
   const rowOk = (r: RowReview) =>
     r.discarded ||
     (r.animalId !== null &&
       (r.acknowledged || r.value !== r.original) &&
       parseMilkLiters(r.value) !== null &&
+      !rowHasDuplicateAnimal(r) &&
       hasCurrentAssignmentDecision(r));
 
   const fieldUnits = fields.filter((field) => field.key !== "rows");
@@ -447,6 +455,7 @@ export function ReviewSheet({
             return {
               animalId: r.animalId!,
               liters: parseMilkLiters(r.value)!,
+              sourceLabel: r.rawLabel,
               ...(review.needsDecision &&
               r.assignmentDecisionFor === review.decisionKey &&
               r.assignmentAction
@@ -738,7 +747,16 @@ export function ReviewSheet({
                       const assignmentDecisionCurrent = hasCurrentAssignmentDecision(r);
                       const ok = rowOk(r);
                       const volumeInvalid = parseMilkLiters(r.value) === null;
-                      const canDiscard = volumeInvalid || !bound || r.probable;
+                      const duplicateAnimal = rowHasDuplicateAnimal(r);
+                      const duplicatePeers = duplicateAnimal
+                        ? (rows ?? []).filter(
+                            (other, peerIndex) =>
+                              peerIndex !== i &&
+                              !other.discarded &&
+                              other.animalId === r.animalId,
+                          )
+                        : [];
+                      const canDiscard = duplicateAnimal || volumeInvalid || !bound || r.probable;
                       return (
                         <div
                           key={`${r.rawLabel}-${i}`}
@@ -825,6 +843,24 @@ export function ReviewSheet({
                             <p className="text-xs text-review-700 mt-1.5" role="alert">
                               Informe um volume entre 0 e 100 L, usando apenas um número, como 12,5 ou 12.5.
                             </p>
+                          )}
+                          {!r.discarded && duplicateAnimal && (
+                            <div
+                              className="mt-2 flex gap-2 rounded-xl border border-review-500/40 bg-review-100 px-3 py-2.5 text-review-700"
+                              role="alert"
+                            >
+                              <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold">
+                                  {r.animalName} aparece em mais de uma linha
+                                </p>
+                                <p className="mt-0.5 text-xs">
+                                  “{r.rawLabel}” também foi vinculada como {duplicatePeers.map(
+                                    (peer) => `“${peer.rawLabel}” (${peer.value} L)`,
+                                  ).join(", ")}. Vincule uma das linhas ao Animal correto ou descarte a duplicada.
+                                </p>
+                              </div>
+                            </div>
                           )}
                           {!r.discarded && edited && (
                             <p className="text-xs text-ink-faint mt-1.5">

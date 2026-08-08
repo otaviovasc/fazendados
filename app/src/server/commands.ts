@@ -94,6 +94,7 @@ const reviewedMeasurementBindings = z.array(
   z.object({
     animalId: z.string().min(1),
     liters: individualLiters,
+    sourceLabel: z.string().trim().min(1).max(80).optional(),
     assignmentAction: z.enum(['move', 'keep']).optional(),
   }),
 );
@@ -1318,9 +1319,6 @@ async function materializeAssistantProposal(
     if ((group.milkingsPerDay === 1 && shift !== 'unica') || (group.milkingsPerDay === 2 && shift === 'unica')) {
       throw badRequest('INVALID_SHIFT', `${group.name} não permite o turno escolhido.`);
     }
-    if (new Set(rows.map((row) => row.animalId)).size !== rows.length) {
-      throw badRequest('DUPLICATE_MEASUREMENT', 'O Controle leiteiro contém o mesmo Animal mais de uma vez.');
-    }
     if (rows.some((row) => !isIndividualMilkLiters(row.liters))) {
       throw badRequest('INVALID_MEASUREMENT', 'As medições individuais devem estar entre 0 e 100 L.');
     }
@@ -1333,6 +1331,45 @@ async function materializeAssistantProposal(
         throw conflict('ANIMAL_ARCHIVED', `${animal.name} está arquivado e não pode receber nova Medição.`);
       }
       animalsById.set(row.animalId, animal);
+    }
+    const rowsByAnimal = new Map<string, typeof rows>();
+    rows.forEach((row) => {
+      rowsByAnimal.set(row.animalId, [...(rowsByAnimal.get(row.animalId) ?? []), row]);
+    });
+    const duplicateMeasurements = [...rowsByAnimal.entries()]
+      .filter(([, occurrences]) => occurrences.length > 1)
+      .map(([animalId, occurrences]) => ({
+        animal_id: animalId,
+        animal_name: animalsById.get(animalId)?.name ?? 'Animal desconhecido',
+        occurrences: occurrences.map((row) => ({
+          source_label: row.sourceLabel ?? null,
+          liters: row.liters,
+          position: rows.indexOf(row) + 1,
+        })),
+      }));
+    if (duplicateMeasurements.length > 0) {
+      const duplicateSummary = duplicateMeasurements.map((duplicate) =>
+        `${duplicate.animal_name}: ${duplicate.occurrences.map((occurrence) =>
+          `linha ${occurrence.position}${occurrence.source_label ? ` “${occurrence.source_label}”` : ''} (${occurrence.liters} L)`,
+        ).join(' e ')}`,
+      ).join('; ');
+      throw badRequest(
+        'DUPLICATE_MEASUREMENT',
+        `O mesmo Animal aparece em mais de uma linha: ${duplicateSummary}. Corrija o vínculo ou descarte a linha duplicada.`,
+        {
+          domain: 'controle_leiteiro',
+          inconsistency: 'duplicate_animal_measurement',
+          farm_id: farmId,
+          proposal_id: proposal.id,
+          date,
+          group_id: group.id,
+          group_name: group.name,
+          shift,
+          duplicate_animal_ids: duplicateMeasurements.map((item) => item.animal_id).join(','),
+          duplicate_animal_names: duplicateMeasurements.map((item) => item.animal_name).join(','),
+          duplicate_measurements: duplicateMeasurements,
+        },
+      );
     }
     // Ordem estável evita deadlock quando duas Propostas contêm os mesmos
     // Animais em ordens diferentes.

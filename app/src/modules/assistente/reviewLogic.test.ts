@@ -7,6 +7,7 @@ import type {
 import {
   assignmentOnDate,
   assignmentReview,
+  duplicateMeasurementAnimalIds,
   exactAnimalDuplicate,
   milkControlFieldIsValid,
 } from "./reviewLogic.ts";
@@ -73,3 +74,30 @@ assert.equal(
   true,
 );
 assert.equal(milkControlFieldIsValid("shift", "manhã", oneMilkingGroup), false);
+
+const duplicateRows = [
+  { animalId: "fietao", discarded: false },
+  { animalId: "503-marrom", discarded: false },
+  { animalId: "fietao", discarded: false },
+  { animalId: "503-branca", discarded: false },
+];
+
+assert.deepEqual(
+  [...duplicateMeasurementAnimalIds(duplicateRows)],
+  ["fietao"],
+);
+assert.deepEqual(
+  [...duplicateMeasurementAnimalIds([
+    duplicateRows[0],
+    { ...duplicateRows[2], discarded: true },
+  ])],
+  [],
+);
+assert.deepEqual(
+  [...duplicateMeasurementAnimalIds([
+    { animalId: "503-marrom", discarded: false },
+    { animalId: "503-branca", discarded: false },
+    { animalId: null, discarded: false },
+  ])],
+  [],
+);

@@ -4,6 +4,7 @@ export class ApiError extends Error {
     public readonly status: number,
     public readonly code: string,
     message: string,
+    public readonly details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -12,4 +13,5 @@ export class ApiError extends Error {
 
 export const notFound = (code: string, message: string) => new ApiError(404, code, message);
 export const conflict = (code: string, message: string) => new ApiError(409, code, message);
-export const badRequest = (code: string, message: string) => new ApiError(400, code, message);
+export const badRequest = (code: string, message: string, details?: Record<string, unknown>) =>
+  new ApiError(400, code, message, details);

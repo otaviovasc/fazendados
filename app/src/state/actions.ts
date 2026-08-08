@@ -91,6 +91,12 @@ export type Action =
       type: "ConfirmAssistantProposal";
       proposalId: string;
       fields: ProposalField[];
-      bindings?: { animalId: string; liters: number; assignmentAction?: "move" | "keep" }[];
+      bindings?: {
+        animalId: string;
+        liters: number;
+        /** Rótulo curto preservado para explicar inconsistências na confirmação. */
+        sourceLabel?: string;
+        assignmentAction?: "move" | "keep";
+      }[];
     }
   | { type: "DismissAssistantProposal"; proposalId: string; reason?: string };

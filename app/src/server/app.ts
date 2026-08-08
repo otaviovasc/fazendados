@@ -436,6 +436,12 @@ export function createApp() {
     const known = error instanceof ApiError;
     const status = known ? error.status : 500;
     const log = status >= 500 ? logger.error : logger.warn;
+    const diagnostic = (key: string) => {
+      const value = known ? error.details?.[key] : undefined;
+      return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+        ? value
+        : null;
+    };
     log(status >= 500 ? 'http.request.failed' : 'http.request.rejected', {
       request_id: c.res.headers.get('x-request-id') ?? null,
       method: c.req.method,
@@ -443,9 +449,27 @@ export function createApp() {
       status,
       error_code: known ? error.code : 'INTERNAL_ERROR',
       error_type: errorType(error),
+      error_domain: diagnostic('domain'),
+      error_inconsistency: diagnostic('inconsistency'),
+      farm_id: diagnostic('farm_id'),
+      proposal_id: diagnostic('proposal_id'),
+      control_date: diagnostic('date'),
+      group_id: diagnostic('group_id'),
+      group_name: diagnostic('group_name'),
+      milking_shift: diagnostic('shift'),
+      duplicate_animal_ids: diagnostic('duplicate_animal_ids'),
+      duplicate_animal_names: diagnostic('duplicate_animal_names'),
+      error_details: known && error.details ? JSON.stringify(error.details) : null,
     });
     return c.json(
-      { ok: false, error: { code: known ? error.code : 'INTERNAL_ERROR', message: known ? error.message : 'Ocorreu um erro interno.' } },
+      {
+        ok: false,
+        error: {
+          code: known ? error.code : 'INTERNAL_ERROR',
+          message: known ? error.message : 'Ocorreu um erro interno.',
+          ...(known && error.details ? { details: error.details } : {}),
+        },
+      },
       status as 400,
     );
   });

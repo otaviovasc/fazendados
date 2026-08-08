@@ -11,6 +11,22 @@ export interface AssignmentReview {
   decisionKey: string | null;
 }
 
+/** Animais vinculados a mais de uma linha ativa do mesmo Controle leiteiro. */
+export function duplicateMeasurementAnimalIds(
+  rows: Array<{ animalId: string | null; discarded: boolean }>,
+): Set<string> {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (row.discarded || row.animalId === null) continue;
+    counts.set(row.animalId, (counts.get(row.animalId) ?? 0) + 1);
+  }
+  return new Set(
+    [...counts.entries()]
+      .filter(([, count]) => count > 1)
+      .map(([animalId]) => animalId),
+  );
+}
+
 /** Mantém a Revisão alinhada ao contrato aceito pelo comando no servidor. */
 export function milkControlFieldIsValid(
   key: string,
