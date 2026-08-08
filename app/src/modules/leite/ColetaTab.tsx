@@ -14,7 +14,6 @@ import type { MilkCollection } from "../../domain/types";
 import {
   Button,
   Card,
-  EmptyState,
   Field,
   Sheet,
   SuccessNotice,
@@ -288,7 +287,6 @@ function MonthChart({
 }
 
 export default function ColetaTab() {
-  const { state } = useFarm();
   const [month, setMonth] = useState(() => startOfMonth(today()));
   const [selectedDate, setSelectedDate] = useState(today());
   const [sheetDate, setSheetDate] = useState<string | null>(null);
@@ -320,13 +318,23 @@ export default function ColetaTab() {
     };
   }
 
+  function openDay(date: string) {
+    const list = byDate.get(date) ?? [];
+    setSelectedDate(date);
+    if (list.length === 1) {
+      setTarget({ kind: "coleta", rec: list[0] });
+    } else {
+      setSheetDate(date);
+    }
+  }
+
   const selectedList = byDate.get(selectedDate) ?? [];
 
   return (
     <div>
       <div className="flex items-center justify-between gap-3 mb-4">
         <p className="text-sm text-ink-soft">
-          Toque em um dia para ver e registrar coletas
+          Toque em um dia para registrar ou corrigir coletas
         </p>
         <Button onClick={() => setSheetDate(today())}>
           <Plus size={16} /> Registrar coleta
@@ -335,68 +343,63 @@ export default function ColetaTab() {
 
       <SuccessNotice message={notice} onDismiss={() => setNotice(null)} />
 
-      {state.collections.length === 0 ? (
-        <Card>
-          <EmptyState
-            icon={<Truck size={28} />}
-            title="Nenhuma coleta registrada"
-            hint="Registre cada passagem do laticínio: data, horário e volume."
-          />
-        </Card>
-      ) : (
-        <Card className="overflow-hidden">
-          <MonthCalendar
-            month={month}
-            onMonthChange={setMonth}
-            dayContent={dayContent}
-            onDayPress={setSelectedDate}
-            selectedDate={selectedDate}
-            dayAriaLabel={(date, content) =>
-              content
-                ? `${formatDay(date)}: ${content.label} coletados`
-                : `${formatDay(date)}: sem coleta`
+      <Card className="overflow-hidden">
+        <MonthCalendar
+          month={month}
+          onMonthChange={setMonth}
+          dayContent={dayContent}
+          onDayPress={openDay}
+          selectedDate={selectedDate}
+          dayAriaLabel={(date, content) => {
+            const count = byDate.get(date)?.length ?? 0;
+            if (count === 1) {
+              return `${formatDay(date)}: ${content?.label} coletados — corrigir coleta`;
             }
-          />
+            if (count > 1) {
+              return `${formatDay(date)}: ${content?.label} coletados em ${count} coletas — registrar outra coleta`;
+            }
+            return `${formatDay(date)}: registrar coleta`;
+          }}
+        />
 
-          {/* Detalhe do dia selecionado */}
-          <div className="border-t border-black/5 px-4 py-3 md:px-5">
-            <div className="flex items-center justify-between gap-3 mb-1">
-              <p className="font-medium capitalize">{formatLong(selectedDate)}</p>
-              <button
-                onClick={() => setSheetDate(selectedDate)}
-                className="inline-flex items-center gap-1 text-sm font-medium text-pasture-700 hover:text-pasture-900 min-h-[44px] -my-1"
-              >
-                <Plus size={15} /> Registrar neste dia
-              </button>
-            </div>
-            {selectedList.length === 0 ? (
-              <p className="text-sm text-ink-soft py-1">
-                Sem coleta em {formatRelativeDay(selectedDate)}.
-              </p>
-            ) : (
-              <ul className="divide-y divide-black/5">
-                {selectedList.map((c) => (
-                  <li key={c.id} className="py-2.5 flex items-center gap-3">
-                    <Truck size={16} className="text-ink-faint shrink-0" />
-                    <p className="flex-1 text-sm text-ink-soft tnum">às {c.time}</p>
-                    <p className="tnum font-semibold">{formatLiters(c.liters)}</p>
-                    <button
-                      onClick={() => setTarget({ kind: "coleta", rec: c })}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-ink-soft hover:text-ink min-h-[44px] px-2 -mr-2"
-                    >
-                      <Pencil size={13} /> Corrigir
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+        {/* Detalhe do dia selecionado */}
+        <div className="border-t border-black/5 px-4 py-3 md:px-5">
+          <div className="flex items-center justify-between gap-3 mb-1">
+            <p className="font-medium capitalize">{formatLong(selectedDate)}</p>
+            <button
+              onClick={() => setSheetDate(selectedDate)}
+              className="inline-flex items-center gap-1 text-sm font-medium text-pasture-700 hover:text-pasture-900 min-h-[44px] -my-1"
+            >
+              <Plus size={15} /> Registrar neste dia
+            </button>
           </div>
+          {selectedList.length === 0 ? (
+            <p className="text-sm text-ink-soft py-1">
+              Sem coleta em {formatRelativeDay(selectedDate)}.
+            </p>
+          ) : (
+            <ul className="divide-y divide-black/5">
+              {selectedList.map((c) => (
+                <li key={c.id} className="py-2.5 flex items-center gap-3">
+                  <Truck size={16} className="text-ink-faint shrink-0" />
+                  <p className="flex-1 text-sm text-ink-soft tnum">às {c.time}</p>
+                  <p className="tnum font-semibold">{formatLiters(c.liters)}</p>
+                  <button
+                    onClick={() => setTarget({ kind: "coleta", rec: c })}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-ink-soft hover:text-ink min-h-[44px] px-2 -mr-2"
+                  >
+                    <Pencil size={13} /> Corrigir
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
-          <div className="border-t border-black/5">
-            <MonthChart month={month} byDate={byDate} />
-          </div>
-        </Card>
-      )}
+        <div className="border-t border-black/5">
+          <MonthChart month={month} byDate={byDate} />
+        </div>
+      </Card>
 
       {sheetDate && (
         <CollectionSheet
