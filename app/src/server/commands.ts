@@ -1141,6 +1141,17 @@ function reviewedTime(value: string) {
   return /^\d{2}:\d{2}$/.test(value) ? value : null;
 }
 
+function reviewedMilkingShift(value: string) {
+  const normalized = normalizeAssistantLabel(value);
+  return normalized === 'manha'
+    ? 'manha'
+    : normalized === 'tarde'
+      ? 'tarde'
+      : normalized === 'unica' || normalized === 'ordenha unica'
+        ? 'unica'
+        : null;
+}
+
 /**
  * Materializa uma Proposta inteira dentro da transação da Confirmação.
  * Nenhum comando HTTP intermediário é usado: qualquer falha lança antes do
@@ -1292,8 +1303,7 @@ async function materializeAssistantProposal(
   if (proposal.kind === 'controle_leiteiro') {
     const date = reviewedDate(reviewedValue(fields, 'date'));
     const groupName = normalizeAssistantLabel(reviewedValue(fields, 'group'));
-    const shiftValue = normalizeAssistantLabel(reviewedValue(fields, 'shift'));
-    const shift = shiftValue === 'manha' ? 'manha' : shiftValue === 'tarde' ? 'tarde' : shiftValue === 'unica' ? 'unica' : null;
+    const shift = reviewedMilkingShift(reviewedValue(fields, 'shift'));
     const group = (await tx.select().from(herdGroups).where(eq(herdGroups.farmId, farmId)))
       .find((candidate) => normalizeAssistantLabel(candidate.name) === groupName);
     const rows = bindings ?? [];

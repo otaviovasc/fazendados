@@ -532,6 +532,38 @@ test('confirmação rejeita controle leiteiro sem turno explícito', async () =>
   );
 });
 
+test('confirma ordenha única do Lote 2 usando o rótulo exibido na Revisão', async () => {
+  const group2 = { id: 'group2', farmId: 'farm1', name: 'Lote 2', milkingsPerDay: 1 as const };
+  const animal = { id: 'animal1', farmId: 'farm1', name: 'Sardinha', tag: null, status: 'ativo' };
+  const tx = createMemoryTx({
+    proposal: proposal('controle_leiteiro', [
+      { key: 'date', value: '2026-07-11' },
+      { key: 'group', value: 'Lote 2' },
+      { key: 'shift', value: 'ordenha única' },
+    ]),
+    groups: [group2],
+    animals: [animal],
+    assignments: [{ id: 'as1', animalId: animal.id, groupId: group2.id, start: '2026-01-01', end: null }],
+  });
+
+  const result = await executeCommand(tx, auth, {
+    type: 'ConfirmAssistantProposal',
+    proposalId: tx.state.proposal.id,
+    fields: tx.state.proposal.fields,
+    bindings: [{ animalId: animal.id, liters: 9 }],
+  } satisfies CommandAction) as { facts: number; recordIds: string[] };
+
+  assert.equal(result.facts, 2);
+  assert.equal(result.recordIds.length, 2);
+  assert.equal(
+    tx.state.audits.some((event: { description?: string }) =>
+      event.description?.includes('(Lote 2, 2026-07-11, unica)'),
+    ),
+    true,
+  );
+  assert.equal(tx.state.assignments[0].groupId, group2.id);
+});
+
 function milkControlProposal() {
   return proposal('controle_leiteiro', [
     { key: 'date', value: '2026-08-04' },
