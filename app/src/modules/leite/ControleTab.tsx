@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Check,
@@ -31,7 +31,7 @@ import {
   today,
 } from "../../lib/dates";
 import { uid } from "../../lib/prng";
-import type { HerdGroup, MilkingShift } from "../../domain/types";
+import type { FarmState, HerdGroup, MilkingShift } from "../../domain/types";
 import { measurementIn, sessionFor, sessionTotal, shiftsOf } from "./utils";
 
 type Wizard =
@@ -58,6 +58,24 @@ const SHIFT_SHORT: Record<MilkingShift, string> = {
   tarde: "tarde",
   unica: "ordenha",
 };
+
+type ControlFilter = "todos" | "pendentes";
+type ControlSort = "lote" | "pendencias_desc";
+
+function missingMeasurementsForGroup(
+  state: FarmState,
+  group: HerdGroup,
+  date: string,
+): number {
+  const animals = animalsInGroup(state, group.id).filter((a) => a.status === "ativo");
+  return animals.reduce((total, animal) => {
+    const missing = shiftsOf(group).filter((shift) => {
+      const session = sessionFor(state, group.id, date, shift);
+      return !session || measurementIn(state, session.id, animal.id) === undefined;
+    }).length;
+    return total + missing;
+  }, 0);
+}
 
 // ---------- Navegador de dia ----------
 
@@ -158,6 +176,7 @@ function MeasurementCell({
 function GroupCard({
   group,
   date,
+  pendingCount,
   expanded,
   onToggle,
   onStartWalk,
@@ -165,6 +184,7 @@ function GroupCard({
 }: {
   group: HerdGroup;
   date: string;
+  pendingCount: number;
   expanded: boolean;
   onToggle: () => void;
   onStartWalk: (groupId: string, shift: MilkingShift) => void;
@@ -196,7 +216,14 @@ function GroupCard({
             {group.milkingsPerDay === 2 ? "2 ordenhas/dia" : "1 ordenha/dia"}
           </span>
         </span>
-        <ChevronDown size={18} className={`shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`} />
+        <span className="flex items-center gap-2 shrink-0">
+          {pendingCount > 0 && (
+            <Chip tone="pendente">
+              {pendingCount} {pendingCount === 1 ? "pendência" : "pendências"}
+            </Chip>
+          )}
+          <ChevronDown size={18} className={`shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`} />
+        </span>
       </button>
 
       {expanded && (
@@ -619,6 +646,8 @@ export default function ControleTab() {
   const [date, setDate] = useState(
     initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? initialDate : today(),
   );
+  const [controlFilter, setControlFilter] = useState<ControlFilter>("todos");
+  const [controlSort, setControlSort] = useState<ControlSort>("lote");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
     () => new Set(initialGroupId ? [initialGroupId] : []),
   );
@@ -630,6 +659,23 @@ export default function ControleTab() {
   } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [completing, setCompleting] = useState(false);
+
+  const groupsForDisplay = useMemo(() => {
+    const rows = state.groups.map((group) => ({
+      group,
+      pendingCount: missingMeasurementsForGroup(state, group, date),
+    }));
+    const filtered = controlFilter === "pendentes"
+      ? rows.filter((row) => row.pendingCount > 0)
+      : rows;
+
+    return filtered.sort((left, right) => {
+      if (controlSort === "pendencias_desc" && left.pendingCount !== right.pendingCount) {
+        return right.pendingCount - left.pendingCount;
+      }
+      return left.group.name.localeCompare(right.group.name, "pt-BR");
+    });
+  }, [state, date, controlFilter, controlSort]);
 
   /** Garante que exista uma sessão para (data, Lote, turno) e devolve o id. */
   function ensureSession(groupId: string, shift: MilkingShift): string {
@@ -789,6 +835,31 @@ export default function ControleTab() {
 
       <SuccessNotice message={notice} onDismiss={() => setNotice(null)} />
 
+      <div className="flex flex-wrap items-end gap-2 mb-4">
+        <label className="flex-1 min-w-40">
+          <span className="block text-xs font-medium text-ink-soft mb-1">Mostrar</span>
+          <select
+            className={inputCls}
+            value={controlFilter}
+            onChange={(event) => setControlFilter(event.target.value as ControlFilter)}
+          >
+            <option value="todos">Todos os Lotes</option>
+            <option value="pendentes">Somente pendências</option>
+          </select>
+        </label>
+        <label className="flex-1 min-w-40">
+          <span className="block text-xs font-medium text-ink-soft mb-1">Ordenar por</span>
+          <select
+            className={inputCls}
+            value={controlSort}
+            onChange={(event) => setControlSort(event.target.value as ControlSort)}
+          >
+            <option value="lote">Nome do Lote</option>
+            <option value="pendencias_desc">Mais pendências</option>
+          </select>
+        </label>
+      </div>
+
       {state.groups.length === 0 ? (
         <Card>
           <EmptyState
@@ -797,12 +868,21 @@ export default function ControleTab() {
             hint="Cadastre um Lote para começar o Controle leiteiro."
           />
         </Card>
+      ) : groupsForDisplay.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={<Check size={28} />}
+            title="Nenhuma pendência neste dia"
+            hint="Todos os Animais dos Lotes já têm medição registrada ou não há pendências para este filtro."
+          />
+        </Card>
       ) : (
-        state.groups.map((g) => (
+        groupsForDisplay.map(({ group: g, pendingCount }) => (
           <GroupCard
             key={g.id}
             group={g}
             date={date}
+            pendingCount={pendingCount}
             expanded={expandedGroups.has(g.id)}
             onToggle={() => setExpandedGroups((current) => {
               const next = new Set(current);

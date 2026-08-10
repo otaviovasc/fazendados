@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -38,11 +38,33 @@ type Movement = {
   quantity: number;
 };
 
+type StockFilter = "todos" | "nao_positivo";
+type StockSort = "nome" | "saldo_asc" | "saldo_desc";
+
 export default function EstoquePage() {
   const { state } = useFarm();
   const [entryOpen, setEntryOpen] = useState(false);
   const [feedingOpen, setFeedingOpen] = useState(false);
   const [newItemOpen, setNewItemOpen] = useState(false);
+  const [stockFilter, setStockFilter] = useState<StockFilter>("todos");
+  const [stockSort, setStockSort] = useState<StockSort>("nome");
+
+  const visibleFeedItems = useMemo(() => {
+    const filtered = state.feedItems.filter((item) => {
+      if (stockFilter === "todos") return true;
+      return feedBalance(state, item.id) <= 0;
+    });
+
+    return filtered.sort((left, right) => {
+      if (stockSort === "nome") return left.name.localeCompare(right.name, "pt-BR");
+      const leftBalance = feedBalance(state, left.id);
+      const rightBalance = feedBalance(state, right.id);
+      const difference = stockSort === "saldo_asc"
+        ? leftBalance - rightBalance
+        : rightBalance - leftBalance;
+      return difference || left.name.localeCompare(right.name, "pt-BR");
+    });
+  }, [state, stockFilter, stockSort]);
 
   return (
     <div>
@@ -61,17 +83,43 @@ export default function EstoquePage() {
         }
       />
 
-      <div className="flex items-center justify-between gap-3 mb-3">
+      <div className="flex flex-wrap items-end justify-between gap-3 mb-3">
         <p className="text-sm text-ink-soft">
           {state.feedItems.length === 0
             ? "Nenhum alimento"
-            : `${state.feedItems.length} ${
+            : `${visibleFeedItems.length} de ${state.feedItems.length} ${
                 state.feedItems.length === 1 ? "alimento" : "alimentos"
               } — toque para ver movimentações`}
         </p>
         <Button variant="secondary" onClick={() => setNewItemOpen(true)}>
           <Plus size={16} /> Novo alimento
         </Button>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-2 mb-4">
+        <label className="flex-1 min-w-40">
+          <span className="block text-xs font-medium text-ink-soft mb-1">Mostrar</span>
+          <select
+            className={inputCls}
+            value={stockFilter}
+            onChange={(event) => setStockFilter(event.target.value as StockFilter)}
+          >
+            <option value="todos">Todos os Alimentos</option>
+            <option value="nao_positivo">Saldo não positivo</option>
+          </select>
+        </label>
+        <label className="flex-1 min-w-40">
+          <span className="block text-xs font-medium text-ink-soft mb-1">Ordenar por</span>
+          <select
+            className={inputCls}
+            value={stockSort}
+            onChange={(event) => setStockSort(event.target.value as StockSort)}
+          >
+            <option value="nome">Nome do Alimento</option>
+            <option value="saldo_asc">Menor saldo</option>
+            <option value="saldo_desc">Maior saldo</option>
+          </select>
+        </label>
       </div>
 
       {state.feedItems.length === 0 ? (
@@ -82,10 +130,18 @@ export default function EstoquePage() {
             hint="Toque em “Novo alimento” para começar a registrar entradas e tratos."
           />
         </Card>
+      ) : visibleFeedItems.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={<Wheat size={32} />}
+            title="Nenhum alimento neste filtro"
+            hint="Todos os Alimentos têm saldo positivo no momento."
+          />
+        </Card>
       ) : (
         <Card>
           <ul className="divide-y divide-ink/5">
-            {state.feedItems.map((item) => (
+            {visibleFeedItems.map((item) => (
               <FeedItemRow key={item.id} item={item} />
             ))}
           </ul>

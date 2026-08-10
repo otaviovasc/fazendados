@@ -9,15 +9,20 @@ import {
   CoverageBadge,
   EmptyState,
   SectionTitle,
+  inputCls,
 } from "../../components/ui";
 import { Segmented } from "./Segmented";
 
 type Periodo = "30d" | "todos";
 type Ordem = "desc" | "asc";
+type CoberturaFiltro = "todos" | "suficiente" | "baixa" | "sem_medicao";
+type Ordenacao = "nome" | "media" | "cobertura" | "medicoes";
+type LoteFiltro = "todos" | "sem_lote" | string;
 
 interface Linha {
   animalId: string;
   nome: string;
+  loteId: string | null;
   lote: string | null;
   media: number | null;
   medicoes: number;
@@ -30,6 +35,9 @@ export function ComparacaoIndividual() {
   const { state } = useFarm();
   const [periodo, setPeriodo] = useState<Periodo>("30d");
   const [ordem, setOrdem] = useState<Ordem>("desc");
+  const [ordenacao, setOrdenacao] = useState<Ordenacao>("media");
+  const [loteFiltro, setLoteFiltro] = useState<LoteFiltro>("todos");
+  const [coberturaFiltro, setCoberturaFiltro] = useState<CoberturaFiltro>("todos");
   const [comoAberto, setComoAberto] = useState(false);
 
   const inicioPeriodo =
@@ -71,22 +79,46 @@ export function ComparacaoIndividual() {
         return {
           animalId: a.id,
           nome: a.name,
+          loteId: groupOf(state, a.id)?.id ?? null,
           lote: groupOf(state, a.id)?.name ?? null,
           media,
           medicoes: n,
           cobertura: totalDias ? n / totalDias : 0,
         };
-      });
+    });
 
-    // Ordena por média, sem rotular: animais sem medição ficam sempre ao final.
-    return base.sort((a, b) => {
+    const filtered = base.filter((line) => {
+      const matchesGroup = loteFiltro === "todos"
+        ? true
+        : loteFiltro === "sem_lote"
+          ? line.loteId === null
+          : line.loteId === loteFiltro;
+      const matchesCoverage = coberturaFiltro === "todos"
+        ? true
+        : coberturaFiltro === "suficiente"
+          ? line.cobertura >= 0.5
+          : coberturaFiltro === "baixa"
+            ? line.cobertura > 0 && line.cobertura < 0.5
+            : line.media === null;
+      return matchesGroup && matchesCoverage;
+    });
+
+    // Ordena sem rotular: animais sem medição ficam sempre ao final.
+    return filtered.sort((a, b) => {
+      if (ordenacao === "nome") return a.nome.localeCompare(b.nome, "pt-BR");
       if (a.media === null && b.media === null)
         return a.nome.localeCompare(b.nome, "pt-BR");
       if (a.media === null) return 1;
       if (b.media === null) return -1;
-      return ordem === "desc" ? b.media - a.media : a.media - b.media;
+
+      const left =
+        ordenacao === "media" ? a.media! : ordenacao === "cobertura" ? a.cobertura : a.medicoes;
+      const right =
+        ordenacao === "media" ? b.media! : ordenacao === "cobertura" ? b.cobertura : b.medicoes;
+      const difference = ordem === "desc" ? right - left : left - right;
+      return difference || a.nome.localeCompare(b.nome, "pt-BR");
     });
-  }, [state, diasControle, ordem]);
+  }, [state, diasControle, ordem, ordenacao, loteFiltro, coberturaFiltro]);
 
   return (
     <section>
@@ -119,12 +151,76 @@ export function ComparacaoIndividual() {
         {" · "}média calculada somente com medições confirmadas
       </p>
 
+      <div className="grid gap-2 sm:grid-cols-3 mb-3">
+        <label>
+          <span className="block text-xs font-medium text-ink-soft mb-1">Lote</span>
+          <select
+            className={inputCls}
+            value={loteFiltro}
+            onChange={(event) => setLoteFiltro(event.target.value)}
+          >
+            <option value="todos">Todos os Lotes</option>
+            {state.groups.map((group) => (
+              <option key={group.id} value={group.id}>{group.name}</option>
+            ))}
+            <option value="sem_lote">Sem Lote</option>
+          </select>
+        </label>
+        <label>
+          <span className="block text-xs font-medium text-ink-soft mb-1">Cobertura</span>
+          <select
+            className={inputCls}
+            value={coberturaFiltro}
+            onChange={(event) => setCoberturaFiltro(event.target.value as CoberturaFiltro)}
+          >
+            <option value="todos">Todas</option>
+            <option value="suficiente">Cobertura ≥ 50%</option>
+            <option value="baixa">Cobertura abaixo de 50%</option>
+            <option value="sem_medicao">Sem medição</option>
+          </select>
+        </label>
+        <label>
+          <span className="block text-xs font-medium text-ink-soft mb-1">Ordenar por</span>
+          <select
+            className={inputCls}
+            value={ordenacao}
+            onChange={(event) => setOrdenacao(event.target.value as Ordenacao)}
+          >
+            <option value="media">Média (L/dia)</option>
+            <option value="cobertura">Cobertura</option>
+            <option value="medicoes">Número de medições</option>
+            <option value="nome">Nome</option>
+          </select>
+        </label>
+      </div>
+
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <p className="text-xs text-ink-faint">
+          Exibindo <span className="tnum">{linhas.length}</span> de <span className="tnum">{state.animals.filter((animal) => animal.status === "ativo").length}</span> Animais ativos
+        </p>
+        {ordenacao !== "nome" && (
+          <button
+            type="button"
+            onClick={() => setOrdem((current) => current === "desc" ? "asc" : "desc")}
+            className="min-h-[44px] px-2 text-xs font-medium text-pasture-700"
+          >
+            {ordem === "desc" ? "Maior primeiro" : "Menor primeiro"}
+          </button>
+        )}
+      </div>
+
       <Card>
         {controles.length === 0 ? (
           <EmptyState
             icon={<Info size={28} />}
             title="Nenhum controle leiteiro no período"
             hint="Registre um Controle leiteiro no módulo Leite para comparar os Animais."
+          />
+        ) : linhas.length === 0 ? (
+          <EmptyState
+            icon={<Info size={28} />}
+            title="Nenhum Animal neste filtro"
+            hint="Ajuste o Lote ou a Cobertura para ampliar a comparação."
           />
         ) : (
           <div className="overflow-x-auto">
@@ -138,20 +234,21 @@ export function ComparacaoIndividual() {
                   <th className="font-medium px-3 py-3 text-right">
                     <button
                       type="button"
-                      onClick={() =>
-                        setOrdem((o) => (o === "desc" ? "asc" : "desc"))
-                      }
+                      onClick={() => {
+                        if (ordenacao !== "media") {
+                          setOrdenacao("media");
+                          setOrdem("desc");
+                        } else {
+                          setOrdem((o) => (o === "desc" ? "asc" : "desc"));
+                        }
+                      }}
                       aria-label={`Ordenar por média, ${
                         ordem === "desc" ? "decrescente" : "crescente"
                       }`}
                       className="inline-flex items-center gap-1 min-h-[44px] -my-2 px-1 font-medium text-ink-soft hover:text-ink transition"
                     >
                       Média (L/dia)
-                      {ordem === "desc" ? (
-                        <ArrowDown size={13} />
-                      ) : (
-                        <ArrowUp size={13} />
-                      )}
+                      {ordenacao === "media" && (ordem === "desc" ? <ArrowDown size={13} /> : <ArrowUp size={13} />)}
                     </button>
                   </th>
                   <th className="font-medium px-3 py-3 text-right">Medições</th>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   AudioLines,
@@ -31,6 +31,7 @@ import {
   PageHeader,
   SectionTitle,
   Sheet,
+  inputCls,
 } from "../../components/ui";
 import { ReviewSheet } from "./ReviewSheet";
 import { CorrectSheet, type CorrectionTarget } from "../leite/CorrectSheet";
@@ -49,6 +50,9 @@ interface Toast {
   message: string;
 }
 
+type PendingFilter = "todas" | "com_pendencias";
+type PendingSort = "antigas" | "pendencias";
+
 export default function AssistentePage() {
   const { state, dispatch, syncAssistantInterpretation } = useFarm();
   const navigate = useNavigate();
@@ -65,10 +69,26 @@ export default function AssistentePage() {
   const [interpreting, setInterpreting] = useState(false);
   const [interpretError, setInterpretError] = useState<string | null>(null);
   const [correctionTarget, setCorrectionTarget] = useState<CorrectionTarget | null>(null);
+  const [pendingFilter, setPendingFilter] = useState<PendingFilter>("todas");
+  const [pendingSort, setPendingSort] = useState<PendingSort>("antigas");
   const cameraInput = useRef<HTMLInputElement>(null);
   const galleryInput = useRef<HTMLInputElement>(null);
 
-  const pending = pendingProposals(state);
+  const pending = useMemo(() => {
+    const filtered = pendingProposals(state).filter((proposal) => {
+      if (pendingFilter === "todas") return true;
+      return proposal.issues.length > 0;
+    });
+
+    return [...filtered].sort((left, right) => {
+      if (pendingSort === "pendencias" && left.issues.length !== right.issues.length) {
+        return right.issues.length - left.issues.length;
+      }
+      const leftAt = captureOf(state, left.captureId)?.createdAt ?? "";
+      const rightAt = captureOf(state, right.captureId)?.createdAt ?? "";
+      return leftAt.localeCompare(rightAt) || left.id.localeCompare(right.id);
+    });
+  }, [state, pendingFilter, pendingSort]);
   const history = sortAssistantHistory(state, state.proposals);
   const savedAttachments = state.captures.flatMap((capture) => (capture.attachments ?? []).filter((attachment) => !attachment.deletedAt));
   const storedNeedsText = Boolean(storedAttachment && storedAttachment.kind !== "imagem" && !text.trim());
@@ -357,12 +377,36 @@ export default function AssistentePage() {
         {/* Propostas pendentes */}
         <section>
           <SectionTitle>Propostas aguardando Revisão</SectionTitle>
+          <div className="flex flex-wrap items-end gap-2 mb-3">
+            <label className="flex-1 min-w-40">
+              <span className="block text-xs font-medium text-ink-soft mb-1">Mostrar</span>
+              <select
+                className={inputCls}
+                value={pendingFilter}
+                onChange={(event) => setPendingFilter(event.target.value as PendingFilter)}
+              >
+                <option value="todas">Todas as Propostas</option>
+                <option value="com_pendencias">Com pendências</option>
+              </select>
+            </label>
+            <label className="flex-1 min-w-40">
+              <span className="block text-xs font-medium text-ink-soft mb-1">Ordenar por</span>
+              <select
+                className={inputCls}
+                value={pendingSort}
+                onChange={(event) => setPendingSort(event.target.value as PendingSort)}
+              >
+                <option value="antigas">Mais antigas</option>
+                <option value="pendencias">Mais pendências</option>
+              </select>
+            </label>
+          </div>
           {pending.length === 0 ? (
             <Card>
               <EmptyState
                 icon={<CheckCircle2 size={28} />}
-                title="Nenhuma proposta pendente"
-                hint="Novas capturas geram propostas para revisão antes de virar Registro."
+                title={pendingFilter === "com_pendencias" ? "Nenhuma proposta com pendência" : "Nenhuma proposta pendente"}
+                hint={pendingFilter === "com_pendencias" ? "As propostas pendentes atuais não têm pendências sinalizadas." : "Novas capturas geram propostas para revisão antes de virar Registro."}
               />
             </Card>
           ) : (

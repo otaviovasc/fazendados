@@ -43,6 +43,7 @@ const norm = (s: string) =>
     .toLowerCase();
 
 type LoteFilter = "todos" | "sem_lote" | string;
+type AnimalSort = "nome" | "variacao_desc" | "variacao_asc";
 
 const round1 = (v: number) => Math.round(v * 10) / 10;
 
@@ -102,12 +103,20 @@ export default function RebanhoPage() {
   const { state } = useFarm();
   const [query, setQuery] = useState("");
   const [loteFilter, setLoteFilter] = useState<LoteFilter>("todos");
+  const [animalSort, setAnimalSort] = useState<AnimalSort>("nome");
   const [showArchived, setShowArchived] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [groupSheetOpen, setGroupSheetOpen] = useState(false);
 
   const visible = useMemo(() => {
     const q = norm(query.trim());
+    const variationByAnimalId = new Map(
+      state.animals.map((animal) => [
+        animal.id,
+        variacao(recentAnimalDailyTotals(state, animal.id, 2)),
+      ])
+    );
+
     return state.animals
       .filter((a) => (showArchived ? true : a.status === "ativo"))
       .filter((a) => {
@@ -120,8 +129,24 @@ export default function RebanhoPage() {
         if (loteFilter === "sem_lote") return g === null;
         return g?.id === loteFilter;
       })
-      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-  }, [state, query, loteFilter, showArchived]);
+      .sort((a, b) => {
+        if (animalSort === "nome") return a.name.localeCompare(b.name, "pt-BR");
+
+        const aVariation = variationByAnimalId.get(a.id) ?? null;
+        const bVariation = variationByAnimalId.get(b.id) ?? null;
+        if (aVariation === null && bVariation === null) {
+          return a.name.localeCompare(b.name, "pt-BR");
+        }
+        if (aVariation === null) return 1;
+        if (bVariation === null) return -1;
+
+        const difference =
+          animalSort === "variacao_desc"
+            ? bVariation - aVariation
+            : aVariation - bVariation;
+        return difference || a.name.localeCompare(b.name, "pt-BR");
+      });
+  }, [state, query, loteFilter, animalSort, showArchived]);
 
   const archivedCount = state.animals.filter((a) => a.status === "arquivado").length;
 
@@ -175,6 +200,22 @@ export default function RebanhoPage() {
         >
           Sem lote
         </FilterChip>
+      </div>
+
+      <div className="mb-4 flex items-center gap-2">
+        <label htmlFor="rebanho-sort" className="shrink-0 text-sm text-ink-soft">
+          Ordenar por
+        </label>
+        <select
+          id="rebanho-sort"
+          className={`${inputCls} max-w-xs`}
+          value={animalSort}
+          onChange={(event) => setAnimalSort(event.target.value as AnimalSort)}
+        >
+          <option value="nome">Nome</option>
+          <option value="variacao_desc">Maior variação (%)</option>
+          <option value="variacao_asc">Menor variação (%)</option>
+        </select>
       </div>
 
       {/* Lista de animais */}

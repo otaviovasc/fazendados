@@ -15,7 +15,7 @@ import { Card, EmptyState, SectionTitle } from "../../components/ui";
 import { Segmented } from "./Segmented";
 import { LineChart as LineIcon } from "lucide-react";
 
-type Periodo = "7" | "30";
+type Periodo = "7" | "30" | "90";
 
 const round1 = (v: number) => Math.round(v * 10) / 10;
 
@@ -54,6 +54,7 @@ export function EvolucaoProducao() {
           options={[
             { value: "7", label: "7 dias" },
             { value: "30", label: "30 dias" },
+            { value: "90", label: "90 dias" },
           ]}
           value={periodo}
           onChange={setPeriodo}
