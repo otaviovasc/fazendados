@@ -475,7 +475,10 @@ export function createApp() {
   });
 
   // ---------- frontend estático (produção; em dev o Vite serve e faz proxy) ----------
-  app.use('/assets/*', serveStatic({ root: './dist/client' }));
+  // Qualquer arquivo real de dist/client é servido direto (bundles, ícones,
+  // logo, manifest, sw.js, áudio); o resto cai no index.html (rotas do SPA).
+  // Rotas /api já foram finalizadas acima, então passam direto por aqui.
+  app.use('*', serveStatic({ root: './dist/client' }));
   app.get('*', serveStatic({ path: './dist/client/index.html' }));
 
   return app;
