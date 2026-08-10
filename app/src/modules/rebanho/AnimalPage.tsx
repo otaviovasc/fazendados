@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import {
   Archive,
   ArrowRightLeft,
@@ -43,6 +43,7 @@ import { addDays, dateKeyInSaoPaulo, formatDay, formatLong } from "../../lib/dat
 
 export default function AnimalPage() {
   const { animalId } = useParams();
+  const { search } = useLocation();
   const { state } = useFarm();
   const animal = state.animals.find((a) => a.id === animalId);
 
@@ -53,7 +54,7 @@ export default function AnimalPage() {
           title="Animal não encontrado"
           hint="O cadastro pode ter sido removido ou o endereço está incorreto."
           action={
-            <Link to="/rebanho">
+            <Link to={{ pathname: "/rebanho", search }}>
               <Button variant="secondary">Voltar ao Rebanho</Button>
             </Link>
           }
@@ -67,7 +68,7 @@ export default function AnimalPage() {
   return (
     <div>
       <Link
-        to="/rebanho"
+        to={{ pathname: "/rebanho", search }}
         className="inline-flex items-center gap-1 text-sm font-medium text-pasture-700 hover:text-pasture-900 mb-3 min-h-[44px] -mt-2"
       >
         <ChevronLeft size={16} />

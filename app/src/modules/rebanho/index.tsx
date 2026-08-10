@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -43,7 +43,31 @@ const norm = (s: string) =>
     .toLowerCase();
 
 type LoteFilter = "todos" | "sem_lote" | string;
-type AnimalSort = "nome" | "variacao_desc" | "variacao_asc";
+type AnimalSort =
+  | "nome"
+  | "variacao_desc"
+  | "variacao_asc"
+  | "producao_desc"
+  | "producao_asc";
+
+type AnimalMetrics = {
+  variation: number | null;
+  latestProduction: number | null;
+};
+
+function searchForRebanho(
+  query: string,
+  loteFilter: LoteFilter,
+  animalSort: AnimalSort,
+  showArchived: boolean,
+): string {
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (loteFilter !== "todos") params.set("lote", loteFilter);
+  if (animalSort !== "nome") params.set("sort", animalSort);
+  if (showArchived) params.set("arquivados", "1");
+  return params.toString();
+}
 
 const round1 = (v: number) => Math.round(v * 10) / 10;
 
@@ -101,20 +125,43 @@ function Sparkline({ totals }: { totals: { date: string; liters: number }[] }) {
 
 export default function RebanhoPage() {
   const { state } = useFarm();
-  const [query, setQuery] = useState("");
-  const [loteFilter, setLoteFilter] = useState<LoteFilter>("todos");
-  const [animalSort, setAnimalSort] = useState<AnimalSort>("nome");
-  const [showArchived, setShowArchived] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
+  const [loteFilter, setLoteFilter] = useState<LoteFilter>(
+    () => searchParams.get("lote") ?? "todos",
+  );
+  const [animalSort, setAnimalSort] = useState<AnimalSort>(() => {
+    const saved = searchParams.get("sort");
+    return saved === "variacao_desc" ||
+      saved === "variacao_asc" ||
+      saved === "producao_desc" ||
+      saved === "producao_asc"
+      ? saved
+      : "nome";
+  });
+  const [showArchived, setShowArchived] = useState(
+    () => searchParams.get("arquivados") === "1",
+  );
   const [sheetOpen, setSheetOpen] = useState(false);
   const [groupSheetOpen, setGroupSheetOpen] = useState(false);
 
+  const rebanhoSearch = searchForRebanho(query, loteFilter, animalSort, showArchived);
+
+  useEffect(() => {
+    if (rebanhoSearch === searchParams.toString()) return;
+    setSearchParams(rebanhoSearch, { replace: true });
+  }, [rebanhoSearch, searchParams, setSearchParams]);
+
   const visible = useMemo(() => {
     const q = norm(query.trim());
-    const variationByAnimalId = new Map(
-      state.animals.map((animal) => [
-        animal.id,
-        variacao(recentAnimalDailyTotals(state, animal.id, 2)),
-      ])
+    const metricsByAnimalId = new Map<string, AnimalMetrics>(
+      state.animals.map((animal) => {
+        const recentTotals = recentAnimalDailyTotals(state, animal.id, 2);
+        return [animal.id, {
+          variation: variacao(recentTotals),
+          latestProduction: recentTotals[0]?.liters ?? null,
+        }];
+      }),
     );
 
     return state.animals
@@ -132,18 +179,28 @@ export default function RebanhoPage() {
       .sort((a, b) => {
         if (animalSort === "nome") return a.name.localeCompare(b.name, "pt-BR");
 
-        const aVariation = variationByAnimalId.get(a.id) ?? null;
-        const bVariation = variationByAnimalId.get(b.id) ?? null;
-        if (aVariation === null && bVariation === null) {
+        const aMetrics = metricsByAnimalId.get(a.id) ?? {
+          variation: null,
+          latestProduction: null,
+        };
+        const bMetrics = metricsByAnimalId.get(b.id) ?? {
+          variation: null,
+          latestProduction: null,
+        };
+        const aValue = animalSort.startsWith("variacao")
+          ? aMetrics.variation
+          : aMetrics.latestProduction;
+        const bValue = animalSort.startsWith("variacao")
+          ? bMetrics.variation
+          : bMetrics.latestProduction;
+        if (aValue === null && bValue === null) {
           return a.name.localeCompare(b.name, "pt-BR");
         }
-        if (aVariation === null) return 1;
-        if (bVariation === null) return -1;
+        if (aValue === null) return 1;
+        if (bValue === null) return -1;
 
         const difference =
-          animalSort === "variacao_desc"
-            ? bVariation - aVariation
-            : aVariation - bVariation;
+          animalSort.endsWith("desc") ? bValue - aValue : aValue - bValue;
         return difference || a.name.localeCompare(b.name, "pt-BR");
       });
   }, [state, query, loteFilter, animalSort, showArchived]);
@@ -215,6 +272,8 @@ export default function RebanhoPage() {
           <option value="nome">Nome</option>
           <option value="variacao_desc">Maior variação (%)</option>
           <option value="variacao_asc">Menor variação (%)</option>
+          <option value="producao_desc">Maior produção (último Controle)</option>
+          <option value="producao_asc">Menor produção (último Controle)</option>
         </select>
       </div>
 
@@ -246,7 +305,10 @@ export default function RebanhoPage() {
               return (
                 <li key={a.id}>
                   <Link
-                    to={`/rebanho/${a.id}`}
+                    to={{
+                      pathname: `/rebanho/${a.id}`,
+                      search: rebanhoSearch ? `?${rebanhoSearch}` : "",
+                    }}
                     className="flex items-center gap-3 px-4 py-3 min-h-[72px] hover:bg-ink/[0.03] transition"
                   >
                     <div className="min-w-0 flex-1">
