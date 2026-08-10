@@ -284,6 +284,33 @@ Captura original e sem apagar fatos. Reutilizar um Anexo no Assistente cria uma
 nova Captura apontando para o mesmo objeto privado e mantém o fluxo Captura →
 Proposta → Revisão → Confirmação. O `storage_key` nunca é exposto à UI.
 
+### D-040 — Mapa de pastejo estilizado em /jogo, separado do /mapa
+
+A operação rápida de pastejo ganha uma segunda visualização: a rota `/jogo`,
+um tabuleiro SVG estilizado derivado das geometrias reais (PostGIS), inspirado
+no "game" do sitio-cafezinho. O `/mapa` (Leaflet + satélite) permanece a
+ferramenta utilitária de desenho e edição de Pastos e Instalações; o `/jogo`
+não edita geometrias. A interação central é clicar num Pasto e mover um Lote
+para ele, reutilizando o comando existente e respeitando a cardinalidade 1:1
+(D-028). Ficam fora do porte: Caderno, loja/economia, plantação/talhões,
+streaks, caminhão animado e o editor de mapa — o primeiro porque o registro
+oficial continua sendo o Assistente, e os demais por serem gamificação ou
+escopo já descontinuado (D-002, D-030, D-032). O áudio é reduzido a soundtrack
+e clique (arquivos mp3 copiados); o sintetizador WebAudio do jogo original foi
+descartado. Melhorias incorporadas ao /jogo: descanso do Pasto visível,
+sugestão de próximo Pasto, resumo do dia no HUD, atalho de registro pelo
+Assistente nas Instalações e paleta que varia por estação do ano.
+
+### D-041 — PWA do app inteiro com auto-update
+
+O app inteiro é distribuído como PWA via vite-plugin-pwa, com
+`registerType: 'autoUpdate'`: a cada deploy o service worker se atualiza sozinho,
+sem intervenção do usuário. O manifest usa o nome FazenDados e theme color
+`#3E6B42`; os ícones são gerados manualmente por
+`app/scripts/generate-pwa-icons.mjs` e commitados em `app/public/icons`. O cache segue a sensibilidade dos
+dados: tiles de satélite (Esri) e arquivos de áudio em CacheFirst; chamadas a
+`/api` são NetworkOnly, pois dado operacional nunca deve ser servido de cache.
+
 ## Pendentes
 
 | ID | Decisão | Recomendação atual |

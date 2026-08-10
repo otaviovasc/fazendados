@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Field, InlineError, inputCls, Sheet } from "../../components/ui";
+import { Button, Field, InlineError, inputCls, rowCls, Sheet } from "../../components/ui";
 import { today } from "../../lib/dates";
 import { pastureOfGroup, useFarm } from "../../state/store";
 import { openOccupancyOfPasture, restingLabel } from "./space";
@@ -8,15 +8,6 @@ interface MoveSheetProps {
   open: boolean;
   onClose: () => void;
 }
-
-const rowCls = (selected: boolean, disabled: boolean) =>
-  `w-full flex items-center justify-between gap-2 rounded-xl border px-3.5 py-3 text-left min-h-[44px] transition ${
-    disabled
-      ? "border-black/5 bg-paper-sunken opacity-60"
-      : selected
-        ? "border-pasture-500 bg-pasture-50 ring-1 ring-pasture-500"
-        : "border-black/10 bg-white hover:border-pasture-200"
-  }`;
 
 /** Sheet "Mover Lote": escolhe Lote, Pasto de destino e data (regra 1:1). */
 export function MoveSheet({ open, onClose }: MoveSheetProps) {

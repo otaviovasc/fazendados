@@ -66,3 +66,111 @@
 .leaflet-container {
   font-family: inherit;
 }
+
+/* ---------- Jogo (/jogo — Tabuleiro da Fazenda) ---------- */
+/* Moldura full-bleed: escapa do padding/max-width do conteúdo e ocupa a
+   viewport entre o topo e a navegação inferior (mobile) ou a sidebar (md+). */
+.game-root {
+  position: relative;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-top: -1.25rem;
+  height: calc(100dvh - 1.25rem - 5.5rem);
+  overflow: hidden;
+}
+@media (min-width: 768px) {
+  .game-root {
+    width: calc(100vw - 15rem);
+    margin-left: calc(50% - (100vw - 15rem) / 2);
+    margin-top: -2rem;
+    height: calc(100dvh - 4rem);
+  }
+}
+
+.game-map {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none; /* o pan/pinça é hand-rolled: o navegador não intercepta */
+  background: #faf7f1; /* paper — a "mesa" sob o diorama */
+  user-select: none;
+}
+
+.game-zoom-controls {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+.game-zoom-button {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgb(0 0 0 / 0.06);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #57534e;
+  display: grid;
+  place-items: center;
+}
+.game-zoom-button:active {
+  transform: scale(0.94);
+}
+
+.game-installation {
+  cursor: pointer;
+  outline: none;
+}
+.game-installation:focus-visible > path:first-child,
+.game-installation:focus-visible > rect:first-child,
+.game-installation:focus-visible > circle:first-child {
+  stroke: #3e6b42;
+  stroke-width: 2.5;
+}
+
+.game-zone-label,
+.game-installation-label {
+  font-size: 17px;
+  font-weight: 600;
+  fill: #1c1917;
+  paint-order: stroke;
+  stroke: rgba(250, 247, 241, 0.85);
+  stroke-width: 3.5;
+  text-anchor: middle;
+}
+.game-installation-label {
+  font-size: 14px;
+}
+
+.game-badge-text {
+  font-size: 15px;
+  font-weight: 700;
+  fill: #1c1917;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+/* Pastar: vagar lento e semeado das vacas (variáveis por vaca no HerdLayer). */
+@keyframes game-graze {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(var(--cow-dx, 0), var(--cow-dy, 0));
+  }
+}
+.game-cow[data-grazing] {
+  animation: game-graze var(--cow-dur, 12s) ease-in-out var(--cow-delay, 0s) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-cow[data-grazing] {
+    animation: none;
+  }
+}

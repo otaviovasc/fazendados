@@ -214,6 +214,16 @@ export function Field({
 export const inputCls =
   "w-full rounded-xl border border-black/10 bg-white px-3.5 py-2.5 text-base tnum outline-none focus:border-pasture-500 focus:ring-2 focus:ring-pasture-100 transition";
 
+/** Linha selecionável de listas em folhas (ex.: escolha de lote/pasto). */
+export const rowCls = (selected: boolean, disabled: boolean) =>
+  `w-full flex items-center justify-between gap-2 rounded-xl border px-3.5 py-3 text-left min-h-[44px] transition ${
+    disabled
+      ? "border-black/5 bg-paper-sunken opacity-60"
+      : selected
+        ? "border-pasture-500 bg-pasture-50 ring-1 ring-pasture-500"
+        : "border-black/10 bg-white hover:border-pasture-200"
+  }`;
+
 export function Button({
   variant = "primary",
   children,

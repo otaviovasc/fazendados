@@ -1,5 +1,6 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 import {
+  Gamepad2,
   Home,
   Sparkles,
   Milk,
@@ -18,6 +19,7 @@ import RebanhoPage from "./modules/rebanho";
 import AnimalPage from "./modules/rebanho/AnimalPage";
 import AnalisePage from "./modules/analise";
 import MapaPage from "./modules/mapa";
+import JogoPage from "./modules/jogo";
 import EstoquePage from "./modules/estoque";
 import FinanceiroPage from "./modules/financeiro";
 import GaleriaPage from "./modules/galeria";
@@ -29,13 +31,14 @@ const NAV = [
   { to: "/rebanho", label: "Rebanho", icon: Beef },
   { to: "/analise", label: "Análise", icon: LineChart },
   { to: "/mapa", label: "Mapa", icon: MapIcon },
+  { to: "/jogo", label: "Jogo", icon: Gamepad2 },
   { to: "/estoque", label: "Estoque", icon: Wheat },
   { to: "/financeiro", label: "Caixa", icon: Wallet },
   { to: "/galeria", label: "Galeria", icon: Images },
 ];
 
-// Mobile: 5 atalhos principais na barra inferior; restante no menu lateral (desktop) e "mais".
-const MOBILE_NAV = NAV.slice(0, 5);
+// Mobile: 5 atalhos na barra inferior; o restante fica na sidebar (desktop).
+const MOBILE_NAV = [...NAV.slice(0, 4), NAV[6]];
 
 export default function App() {
   const { state } = useFarm();
@@ -84,6 +87,7 @@ export default function App() {
             <Route path="/rebanho/:animalId" element={<AnimalPage />} />
             <Route path="/analise" element={<AnalisePage />} />
             <Route path="/mapa" element={<MapaPage />} />
+            <Route path="/jogo" element={<JogoPage />} />
             <Route path="/estoque" element={<EstoquePage />} />
             <Route path="/financeiro" element={<FinanceiroPage />} />
             <Route path="/galeria" element={<GaleriaPage />} />

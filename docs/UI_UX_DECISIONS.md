@@ -21,6 +21,21 @@ abertas. Mudanças aqui exigem nova decisão registrada em `docs/DECISIONS.md`.
 - **Gráficos:** Recharts.
 - **Mapa:** Leaflet com camada de satélite ESRI.
 
+## Mapas: duas visualizações com papéis distintos
+
+- **`/mapa` (utilitário):** Leaflet + satélite ESRI, para desenhar e editar
+  polígonos de Pastos e pontos de Instalações. É a ferramenta de cadastro
+  espacial.
+- **`/jogo` (tabuleiro):** SVG estilizado derivado das geometrias reais, para a
+  operação rápida de pastejo — clicar num Pasto e mover um Lote para ele. Não
+  edita geometrias.
+- **Descanso do Pasto visível:** cada Pasto no tabuleiro mostra há quantos dias
+  está descansando, e o jogo sugere o próximo Pasto para o Lote.
+- **Paleta por estação do ano:** as cores do tabuleiro variam conforme a
+  estação, mantendo a legibilidade dos estados de cada Pasto.
+- **HUD com resumo do dia:** o /jogo exibe um resumo do dia (produção, trato,
+  pendências) e as Instalações oferecem atalho de registro pelo Assistente.
+
 ## Captura, Proposta e Registro
 
 A pessoa sempre sabe em qual estado está:

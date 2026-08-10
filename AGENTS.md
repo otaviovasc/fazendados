@@ -40,7 +40,9 @@ principal porta de entrada de dados.
 
 ## Fronteira do V1
 
-Inclui: identidade e Fazenda, animais e lotes, mapa com pastos e instalações,
+Inclui: identidade e Fazenda, animais e lotes, mapa com pastos e instalações
+(`/mapa` utilitário de desenho/edição e `/jogo`, tabuleiro SVG para a operação
+de pastejo),
 produção de leite, coleta, trato, estoque derivado, financeiro simples,
 assistente, consulta e observabilidade.
 
