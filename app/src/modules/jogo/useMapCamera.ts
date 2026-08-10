@@ -19,6 +19,7 @@ export function useMapCamera(viewWidth: number, viewHeight: number) {
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinchDistance = useRef<number | null>(null);
   const dragDistance = useRef(0);
+  const downTarget = useRef<EventTarget | null>(null);
 
   const clamp = useCallback((next: Camera): Camera => clampCamera(next, viewWidth, viewHeight), [viewWidth, viewHeight]);
 
@@ -40,6 +41,7 @@ export function useMapCamera(viewWidth: number, viewHeight: number) {
 
   const onPointerDown = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId);
+    downTarget.current = event.target;
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     dragDistance.current = 0;
     if (pointers.current.size === 2) {
@@ -74,6 +76,14 @@ export function useMapCamera(viewWidth: number, viewHeight: number) {
   const onPointerUp = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
     pointers.current.delete(event.pointerId);
     if (pointers.current.size < 2) pinchDistance.current = null;
+    // Tap: o pointer capture retargeta o click nativo para o <svg> raiz, então
+    // o onClick dos filhos nunca dispara. Re-despachamos o clique no elemento
+    // clicável de origem — só vale se o gesto não foi arrasto/pinça.
+    const target = downTarget.current;
+    downTarget.current = null;
+    if (pointers.current.size === 0 && dragDistance.current <= 6 && target instanceof Element) {
+      target.closest('[role="button"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    }
   }, []);
 
   const onWheel = useCallback((event: ReactWheelEvent<SVGSVGElement>) => {

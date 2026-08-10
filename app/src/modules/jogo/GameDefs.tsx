@@ -1,17 +1,23 @@
 import type { Season } from './tokens';
-import { seasonalColors, seasonalRestStops } from './tokens';
+import { seasonalColors, seasonalOccupiedStops, seasonalRestStops } from './tokens';
 
 /**
- * <defs> compartilhados do mapa: gradientes do descanso (2 stops), textura de
- * tufos de capim e a sombra única do diorama. Ids são globais no SVG do jogo.
- * A paleta vem da estação do ano (hemisfério sul) via `season`.
+ * <defs> compartilhados do mapa: gradientes dos pastos (ocupação: verde →
+ * marrom; descanso: marrom → verde — 2 stops cada), textura de tufos de capim
+ * e a sombra única do diorama. Ids são globais no SVG do jogo. A paleta vem
+ * da estação do ano (hemisfério sul) via `season`.
  */
 export function GameDefs({ season }: { season: Season }) {
   const colors = seasonalColors(season);
+  const occupiedStops = seasonalOccupiedStops(season);
   const restStops = seasonalRestStops(season);
   const { meadowEdge, ink, grass, grassLight } = colors;
   return <defs>
-    {restStops.map((stop, index) => <linearGradient key={index} id={`game-pasture-${index}`} x1="0" y1="0" x2="0.35" y2="1">
+    {occupiedStops.map((stop, index) => <linearGradient key={`occupied-${index}`} id={`game-pasture-occupied-${index}`} x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stopColor={stop.light} />
+      <stop offset="1" stopColor={stop.base} />
+    </linearGradient>)}
+    {restStops.map((stop, index) => <linearGradient key={`resting-${index}`} id={`game-pasture-resting-${index}`} x1="0" y1="0" x2="0.35" y2="1">
       <stop offset="0" stopColor={stop.light} />
       <stop offset="1" stopColor={stop.base} />
     </linearGradient>)}

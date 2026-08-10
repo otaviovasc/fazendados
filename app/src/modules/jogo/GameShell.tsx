@@ -1,15 +1,15 @@
-import { ClipboardCheck, Milk, Volume2, VolumeX } from 'lucide-react';
+import { ClipboardCheck, Milk, Pencil, Volume2, VolumeX } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { pendingProposals, productionFor, today, useFarm } from '../../state/store';
 import { useGameAudio } from './audio/useGameAudio';
-import { seasonalRestStops, type Season } from './tokens';
+import { seasonalOccupiedStops, seasonalRestStops, type Season } from './tokens';
 
 /**
  * Moldura full-bleed do jogo + HUD flutuante: botão de mudo, chip "Resumo do
  * dia" (litros de leite do dia + pendências de revisão do Assistente, que
- * navega para o fluxo de revisão existente) e a legenda do descanso dos
- * pastos. Tudo dentro dela vive no mundo do jogo — nada de .page/.card.
+ * navega para o fluxo de revisão existente), botão "Editar mapa" (/mapa) e a
+ * legenda do estado dos pastos (pastejo × descanso). Tudo dentro dela vive no
  */
 export function GameShell({ children, season }: { children: ReactNode; season: Season }) {
   const { state } = useFarm();
@@ -24,14 +24,24 @@ export function GameShell({ children, season }: { children: ReactNode; season: S
 
     {/* HUD: topo — mudo + resumo do dia. */}
     <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-3 safe-top">
-      <button
-        type="button"
-        onClick={toggleMuted}
-        aria-label={muted ? 'Ativar som' : 'Silenciar'}
-        className="pointer-events-auto grid size-11 place-items-center rounded-full bg-paper-card/90 shadow-md border border-black/5 text-ink-soft"
-      >
-        {muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
-      </button>
+      <div className="pointer-events-auto flex items-center gap-2">
+        <button
+          type="button"
+          onClick={toggleMuted}
+          aria-label={muted ? 'Ativar som' : 'Silenciar'}
+          className="grid size-11 place-items-center rounded-full bg-paper-card/90 shadow-md border border-black/5 text-ink-soft"
+        >
+          {muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/mapa')}
+          aria-label="Editar mapa"
+          className="grid size-11 place-items-center rounded-full bg-paper-card/90 shadow-md border border-black/5 text-ink-soft"
+        >
+          <Pencil size={20} />
+        </button>
+      </div>
 
       <button
         type="button"
@@ -53,20 +63,29 @@ export function GameShell({ children, season }: { children: ReactNode; season: S
       </button>
     </div>
 
-    {/* Legenda do descanso dos pastos (canto inferior esquerdo). */}
+    {/* Legenda do estado dos pastos (canto inferior esquerdo): ocupado
+        marronheia com os dias de pastejo; livre esverdeia com o descanso. */}
     <div className="pointer-events-none absolute left-3 bottom-3 z-10 rounded-2xl bg-paper-card/90 shadow-md border border-black/5 px-3 py-2">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint mb-1.5">Descanso do pasto</p>
-      <ul className="flex flex-col gap-1">
-        {seasonalRestStops(season).map((stop) => (
-          <li key={stop.label} className="flex items-center gap-1.5 text-[11px] text-ink-soft">
-            <span
-              className="inline-block size-3 rounded-sm border border-black/10"
-              style={{ background: `linear-gradient(135deg, ${stop.light}, ${stop.base})` }}
-            />
-            {stop.label}
-          </li>
-        ))}
-      </ul>
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint mb-1.5">Estado do pasto</p>
+      {([
+        ['Em pastejo', seasonalOccupiedStops(season)],
+        ['Em descanso', seasonalRestStops(season)],
+      ] as const).map(([group, stops]) => (
+        <div key={group} className="mb-1.5 last:mb-0">
+          <p className="text-[9px] font-medium uppercase tracking-wide text-ink-faint mb-0.5">{group}</p>
+          <ul className="flex flex-col gap-1">
+            {stops.map((stop) => (
+              <li key={stop.label} className="flex items-center gap-1.5 text-[11px] text-ink-soft">
+                <span
+                  className="inline-block size-3 rounded-sm border border-black/10"
+                  style={{ background: `linear-gradient(135deg, ${stop.light}, ${stop.base})` }}
+                />
+                {stop.label}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
       <p className="mt-1.5 text-[10px] text-ink-faint capitalize">{season}</p>
     </div>
   </div>;

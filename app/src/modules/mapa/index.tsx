@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ArrowRightLeft, MapPin, Pencil, Undo2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ArrowLeft, ArrowRightLeft, MapPin, Pencil, Undo2 } from "lucide-react";
 import { Button, Field, inputCls, PageHeader, Sheet } from "../../components/ui";
 import type { InstallationType, LatLng } from "../../domain/types";
 import { useFarm } from "../../state/store";
@@ -148,6 +149,13 @@ export default function MapaPage() {
 
   return (
     <div>
+      <Link
+        to="/jogo"
+        className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-ink-soft hover:text-ink"
+      >
+        <ArrowLeft size={16} />
+        Jogo
+      </Link>
       <PageHeader
         title="Mapa"
         subtitle="Pastos, lotes e instalações da fazenda"

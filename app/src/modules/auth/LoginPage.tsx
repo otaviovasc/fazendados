@@ -1,6 +1,6 @@
 // Tela de entrada: credenciais do Usuário, sessão em cookie httpOnly.
 import { useState, type FormEvent } from "react";
-import { Lock, Milk, UserRound } from "lucide-react";
+import { Lock, UserRound } from "lucide-react";
 import { ApiRequestError, NetworkError } from "../../state/api";
 import { Button, inputCls } from "../../components/ui";
 
@@ -43,10 +43,7 @@ export function LoginPage({
     <div className="min-h-dvh grid place-items-center px-6 bg-paper">
       <form onSubmit={submit} className="w-full max-w-sm">
         <div className="flex flex-col items-center text-center mb-8">
-          <div className="size-14 rounded-2xl bg-pasture-100 text-pasture-700 grid place-items-center mb-4">
-            <Milk size={28} />
-          </div>
-          <h1 className="text-2xl font-semibold tracking-tight">FazenDados</h1>
+          <img src="/brand/logo-complete.webp" alt="FazenDados" className="h-16 w-auto mb-3" />
           <p className="text-sm text-ink-soft mt-1">O caderno da fazenda, sem papel.</p>
         </div>
 

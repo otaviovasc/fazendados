@@ -1,4 +1,5 @@
-import { NavLink, Route, Routes } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 import {
   Gamepad2,
   Home,
@@ -6,10 +7,10 @@ import {
   Milk,
   Beef,
   LineChart,
-  Map as MapIcon,
   Wheat,
   Wallet,
   Images,
+  Menu as MenuIcon,
 } from "lucide-react";
 import { useFarm, pendingProposals } from "./state/store";
 import InicioPage from "./modules/inicio";
@@ -23,6 +24,16 @@ import JogoPage from "./modules/jogo";
 import EstoquePage from "./modules/estoque";
 import FinanceiroPage from "./modules/financeiro";
 import GaleriaPage from "./modules/galeria";
+import { Sheet } from "./components/ui";
+
+// Volta ao topo a cada troca de rota — comportamento de app nativo.
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
 
 const NAV = [
   { to: "/", label: "Início", icon: Home, end: true },
@@ -30,27 +41,33 @@ const NAV = [
   { to: "/leite", label: "Leite", icon: Milk },
   { to: "/rebanho", label: "Rebanho", icon: Beef },
   { to: "/analise", label: "Análise", icon: LineChart },
-  { to: "/mapa", label: "Mapa", icon: MapIcon },
   { to: "/jogo", label: "Jogo", icon: Gamepad2 },
   { to: "/estoque", label: "Estoque", icon: Wheat },
   { to: "/financeiro", label: "Caixa", icon: Wallet },
   { to: "/galeria", label: "Galeria", icon: Images },
 ];
 
-// Mobile: 5 atalhos na barra inferior; o restante fica na sidebar (desktop).
-const MOBILE_NAV = [...NAV.slice(0, 4), NAV[6]];
+// Mobile: 4 atalhos fixos na barra inferior; o restante fica no menu "Mais".
+const MOBILE_NAV = NAV.slice(0, 4);
+const MOBILE_MORE = NAV.slice(4);
 
 export default function App() {
   const { state } = useFarm();
   const pending = pendingProposals(state).length;
+  const { pathname } = useLocation();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreActive = MOBILE_MORE.some((item) =>
+    item.end ? pathname === item.to : pathname.startsWith(item.to)
+  );
 
   return (
     <div className="min-h-dvh md:flex">
+      <ScrollToTop />
       {/* Sidebar desktop */}
       <aside className="hidden md:flex flex-col w-60 shrink-0 border-r border-black/5 bg-paper-card px-3 py-5 sticky top-0 h-dvh">
         <div className="px-3 mb-6">
-          <p className="font-semibold tracking-tight">FazenDados</p>
-          <p className="text-xs text-ink-soft mt-0.5">{state.farm.name}</p>
+          <img src="/brand/logo-complete.webp" alt="FazenDados" className="h-9 w-auto" />
+          <p className="text-xs text-ink-soft mt-1.5">{state.farm.name}</p>
         </div>
         <nav className="flex flex-col gap-1">
           {NAV.map(({ to, label, icon: Icon, end }) => (
@@ -77,7 +94,7 @@ export default function App() {
       </aside>
 
       {/* Conteúdo */}
-      <main className="flex-1 min-w-0 pb-24 md:pb-8">
+      <main className="flex-1 min-w-0 pb-24 md:pb-8 safe-top">
         <div className="mx-auto max-w-content px-4 pt-5 md:px-8 md:pt-8">
           <Routes>
             <Route path="/" element={<InicioPage />} />
@@ -96,7 +113,7 @@ export default function App() {
       </main>
 
       {/* Bottom nav mobile */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-paper-card/95 backdrop-blur border-t border-black/5 safe-bottom">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-paper-card/95 backdrop-blur border-t border-black/5 safe-bottom select-none">
         <div className="grid grid-cols-5">
           {MOBILE_NAV.map(({ to, label, icon: Icon, end }) => (
             <NavLink
@@ -104,7 +121,7 @@ export default function App() {
               to={to}
               end={end}
               className={({ isActive }) =>
-                `relative flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium ${
+                `relative flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium transition-transform active:scale-90 ${
                   isActive ? "text-pasture-600" : "text-ink-faint"
                 }`
               }
@@ -118,8 +135,42 @@ export default function App() {
               )}
             </NavLink>
           ))}
+          <button
+            type="button"
+            onClick={() => setMoreOpen(true)}
+            aria-label="Mais opções"
+            className={`flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium transition-transform active:scale-90 ${
+              moreActive ? "text-pasture-600" : "text-ink-faint"
+            }`}
+          >
+            <MenuIcon size={20} />
+            Mais
+          </button>
         </div>
       </nav>
+
+      {/* Menu "Mais" — destinos sem espaço na barra inferior */}
+      <Sheet open={moreOpen} onClose={() => setMoreOpen(false)} title="Mais">
+        <img src="/brand/logo-icon.webp" alt="" className="h-12 w-12 mx-auto mb-4 rounded-xl" />
+        <div className="grid grid-cols-3 gap-2">
+          {MOBILE_MORE.map(({ to, label, icon: Icon, end }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              onClick={() => setMoreOpen(false)}
+              className={({ isActive }) =>
+                `flex flex-col items-center gap-1.5 rounded-2xl px-2 py-4 text-xs font-medium min-h-[44px] transition-transform active:scale-95 ${
+                  isActive ? "bg-pasture-100 text-pasture-700" : "bg-ink/[0.03] text-ink-soft"
+                }`
+              }
+            >
+              <Icon size={22} />
+              {label}
+            </NavLink>
+          ))}
+        </div>
+      </Sheet>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useMemo, type KeyboardEvent } from 'react';
 import { centroid, pointInPolygon, spacedPointsAlongRing } from '../../../domain/game/geometry';
 import { herdClusterLayout } from '../../../domain/game/herd-layout';
-import { daysSinceLastOccupancy, restBucket } from '../../../domain/game/pasture-rest';
+import { pastureBucket, type PastureVisual } from '../../../domain/game/pasture-rest';
 import { toPathData, type GameProjection } from '../../../domain/game/projection';
 import type { FarmBoundary, Pasture, PastureOccupancy } from '../../../domain/types';
 import { TreeSprite } from '../sprites/TreeSprite';
@@ -10,13 +10,26 @@ import { gameTokens, type Season } from '../tokens';
 /**
  * Perímetro (diorama gramado com cerca de mourões) + pastos cercados. O chão
  * INTEIRO da fazenda é grama (gradiente `game-ground-grass` + tufos) — os
- * pastos são recortes tingidos pelo DESCANSO (gradiente verde → marrom, faixa
- * via `restBucket` a partir das ocupações). Perímetro e pastos seguem
- * EXATAMENTE os pontos traçados (sem arredondar). Tocar num pasto abre a
- * folha do pasto; o pointerdown propaga para o pan da câmera e o click é
- * suprimido quando o gesto foi arrasto (`didDrag`). Árvores decorativas
- * nascem deterministicamente no chão livre.
+ * pastos são recortes tingidos pelo estado do pastejo (`pastureBucket` a
+ * partir das ocupações): OCUPADO marronheia com os dias de pastejo, LIVRE
+ * esverdeia com os dias de descanso. Perímetro e pastos seguem EXATAMENTE os
+ * pontos traçados (sem arredondar). Tocar num pasto abre a folha do pasto; o
+ * pointerdown propaga para o pan da câmera e o click é suprimido quando o
+ * gesto foi arrasto (`didDrag`). Árvores decorativas nascem
+ * deterministicamente no chão livre.
  */
+
+/** Estado do pasto em texto, para o aria-label do botão. */
+function pastureStateLabel(visual: PastureVisual): string {
+  if (visual.state === 'occupied') {
+    return `em pastejo há ${visual.days} ${visual.days === 1 ? 'dia' : 'dias'}`;
+  }
+  if (visual.state === 'resting') {
+    if (visual.days === 0) return 'em descanso desde hoje';
+    return `em descanso há ${visual.days} ${visual.days === 1 ? 'dia' : 'dias'}`;
+  }
+  return 'sem ocupação registrada';
+}
 export function ZoneLayer({ boundary, pastures, occupancies, projection, season, now, onSelectPasture, didDrag }: {
   boundary: FarmBoundary;
   pastures: Pasture[];
@@ -45,15 +58,14 @@ export function ZoneLayer({ boundary, pastures, occupancies, projection, season,
 
   const pastureShapes = useMemo(() => pastures.map((pasture) => {
     const projected = pasture.polygon.map(projection.toLocal);
-    const days = daysSinceLastOccupancy(pasture.id, occupancies, now);
+    const visual = pastureBucket(pasture.id, occupancies, now);
     return {
       pasture,
       projected,
       path: toPathData(projected),
       label: centroid(projected),
       posts: spacedPointsAlongRing(projected, gameTokens.fence.pasturePostSpacing),
-      bucket: restBucket(days),
-      days,
+      visual,
     };
   }), [pastures, occupancies, projection, now]);
 
@@ -87,19 +99,19 @@ export function ZoneLayer({ boundary, pastures, occupancies, projection, season,
         <circle r={gameTokens.fence.postRadius * 0.45} fill={colors.woodDark} />
       </g>)}
     </g>
-    {pastureShapes.map(({ pasture, path, label, posts, bucket, days }) => <g
+    {pastureShapes.map(({ pasture, path, label, posts, visual }) => <g
       key={pasture.id}
       role="button"
       tabIndex={0}
-      aria-label={`Pasto: ${pasture.name}${days === 0 ? ' — em pastejo' : ''} — abrir a folha do pasto`}
+      aria-label={`Pasto: ${pasture.name} — ${pastureStateLabel(visual)} — abrir a folha do pasto`}
       className="game-installation"
       onClick={() => { if (!didDrag?.()) onSelectPasture?.(pasture); }}
       onKeyDown={(event) => activatePasture(event, pasture)}
     >
       <path
         d={path}
-        fill={`url(#game-pasture-${bucket})`}
-        data-rest-days={days ?? undefined}
+        fill={`url(#game-pasture-${visual.state === 'occupied' ? 'occupied' : 'resting'}-${visual.bucket})`}
+        data-rest-days={visual.days ?? undefined}
         data-testid={`game-zone-${pasture.id}`}
       />
       <path d={path} fill="url(#game-grass)" pointerEvents="none" />

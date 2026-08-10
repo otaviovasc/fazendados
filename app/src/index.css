@@ -8,9 +8,14 @@
 @layer base {
   html {
     -webkit-font-smoothing: antialiased;
+    /* Remove o highlight cinza de toque do iOS e o delay de double-tap zoom. */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
   body {
     @apply bg-paper text-ink font-sans;
+    /* Sem rubber-band/pull-to-refresh expondo chrome do navegador. */
+    overscroll-behavior-y: none;
   }
 }
 

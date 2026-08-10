@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Pasture, PastureOccupancy } from '../types.js';
-import { daysSinceLastOccupancy, openOccupancyOfPasture, restBucket, suggestedPasture } from './pasture-rest.js';
+import { daysSinceLastOccupancy, occupationDays, openOccupancyOfPasture, pastureBucket, suggestedPasture } from './pasture-rest.js';
 
 const NOW = new Date(Date.parse('2026-08-10T12:00:00Z'));
 
@@ -58,23 +58,63 @@ describe('openOccupancyOfPasture', () => {
   });
 });
 
-describe('restBucket', () => {
-  it('mapeia faixas de descanso para o gradiente', () => {
-    assert.equal(restBucket(0), 0); // em pastejo
-    assert.equal(restBucket(1), 1); // até 1 semana
-    assert.equal(restBucket(7), 1);
-    assert.equal(restBucket(8), 2); // até 3 semanas
-    assert.equal(restBucket(21), 2);
-    assert.equal(restBucket(22), 3); // até 1,5 mês
-    assert.equal(restBucket(45), 3);
-    assert.equal(restBucket(46), 4); // muito descanso
-    assert.equal(restBucket(200), 4);
-    assert.equal(restBucket(null), 4);
+describe('occupationDays', () => {
+  it('conta dias desde o início da ocupação aberta', () => {
+    const occ = [occupancy('p1', '2026-08-01', null)];
+    assert.equal(occupationDays('p1', occ, NOW), 9);
   });
 
-  it('respeita o número de faixas', () => {
-    assert.equal(restBucket(200, 3), 2);
-    assert.equal(restBucket(null, 3), 2);
+  it('retorna null quando o pasto está livre', () => {
+    const occ = [occupancy('p1', '2026-07-01', '2026-08-01')];
+    assert.equal(occupationDays('p1', occ, NOW), null);
+    assert.equal(occupationDays('p1', [], NOW), null);
+  });
+
+  it('não devolve negativo se a ocupação começou hoje', () => {
+    const occ = [occupancy('p1', '2026-08-10', null)];
+    assert.equal(occupationDays('p1', occ, NOW), 0);
+  });
+
+  it('ignora ocupações de outros pastos', () => {
+    const occ = [occupancy('p2', '2026-08-01', null)];
+    assert.equal(occupationDays('p1', occ, NOW), null);
+  });
+});
+
+describe('pastureBucket', () => {
+  it('pasto ocupado marronheia com os dias de pastejo', () => {
+    const mk = (start: string) => [occupancy('p1', start, null)];
+    assert.deepEqual(pastureBucket('p1', mk('2026-08-10'), NOW), { state: 'occupied', days: 0, bucket: 0 });
+    assert.deepEqual(pastureBucket('p1', mk('2026-08-03'), NOW), { state: 'occupied', days: 7, bucket: 0 });
+    assert.deepEqual(pastureBucket('p1', mk('2026-08-02'), NOW), { state: 'occupied', days: 8, bucket: 1 });
+    assert.deepEqual(pastureBucket('p1', mk('2026-07-27'), NOW), { state: 'occupied', days: 14, bucket: 1 });
+    assert.deepEqual(pastureBucket('p1', mk('2026-07-26'), NOW), { state: 'occupied', days: 15, bucket: 2 });
+    assert.deepEqual(pastureBucket('p1', mk('2026-07-20'), NOW), { state: 'occupied', days: 21, bucket: 2 });
+    assert.deepEqual(pastureBucket('p1', mk('2026-07-19'), NOW), { state: 'occupied', days: 22, bucket: 3 });
+    assert.equal(pastureBucket('p1', mk('2026-01-01'), NOW).bucket, 3);
+  });
+
+  it('pasto livre esverdeia com os dias de descanso', () => {
+    const mk = (end: string) => [occupancy('p1', '2026-01-01', end)];
+    assert.deepEqual(pastureBucket('p1', mk('2026-08-10'), NOW), { state: 'resting', days: 0, bucket: 0 });
+    assert.deepEqual(pastureBucket('p1', mk('2026-08-03'), NOW), { state: 'resting', days: 7, bucket: 0 });
+    assert.deepEqual(pastureBucket('p1', mk('2026-08-02'), NOW), { state: 'resting', days: 8, bucket: 1 });
+    assert.deepEqual(pastureBucket('p1', mk('2026-07-20'), NOW), { state: 'resting', days: 21, bucket: 1 });
+    assert.deepEqual(pastureBucket('p1', mk('2026-07-19'), NOW), { state: 'resting', days: 22, bucket: 2 });
+    assert.deepEqual(pastureBucket('p1', mk('2026-06-26'), NOW), { state: 'resting', days: 45, bucket: 2 });
+    assert.deepEqual(pastureBucket('p1', mk('2026-06-25'), NOW), { state: 'resting', days: 46, bucket: 3 });
+  });
+
+  it('pasto nunca pastejado é verde profundo (capim intocado)', () => {
+    assert.deepEqual(pastureBucket('p1', [], NOW), { state: 'never', days: null, bucket: 3 });
+  });
+
+  it('prioriza a ocupação aberta sobre fechadas anteriores', () => {
+    const occ = [
+      occupancy('p1', '2026-06-01', '2026-06-20'),
+      occupancy('p1', '2026-08-01', null),
+    ];
+    assert.deepEqual(pastureBucket('p1', occ, NOW), { state: 'occupied', days: 9, bucket: 1 });
   });
 });
 

@@ -50,21 +50,30 @@ const baseColors = {
 };
 
 /**
- * Gradiente de descanso do pasto (5 faixas): do verde de "em pastejo"
- * ao marrom de "muitos dias de descanso". As faixas casam com `restBucket`
- * (domain/game/pasture-rest): 0 = em pastejo, depois 1–7, 8–21, 22–45 e 46+
- * dias de descanso.
+ * Gradientes do pasto com a semântica agronômica do pastejo (4 faixas cada),
+ * casando com `pastureBucket` (domain/game/pasture-rest):
+ * - OCUPADO: do verde vivo ao marrom conforme os dias de ocupação (capim
+ *   sendo comido): 0–7, 8–14, 15–21 e 22+ dias.
+ * - DESCANSO: do marrom (recém-saído) ao verde profundo conforme a rebrota:
+ *   0–7, 8–21, 22–45 e 46+ dias (nunca pastejado = verde profundo).
  */
-const restStopsBase: { light: string; base: string; label: string }[] = [
+const occupiedStopsBase: { light: string; base: string; label: string }[] = [
   { light: '#B5CD93', base: '#A4C17E', label: 'Em pastejo' },
-  { light: '#C6D9A6', base: '#B7CE93', label: 'Até 1 semana' },
-  { light: '#D8DCA4', base: '#CDD18D', label: 'Até 3 semanas' },
-  { light: '#E0D49C', base: '#D6C47E', label: 'Até 1,5 mês' },
-  { light: '#D9BC8E', base: '#C7A671', label: 'Muito descanso' },
+  { light: '#CDD69F', base: '#BDC983', label: 'Pastejo 8–14d' },
+  { light: '#E0D49C', base: '#D6C47E', label: 'Pastejo 15–21d' },
+  { light: '#D9BC8E', base: '#C7A671', label: 'Pastejo 22d+' },
+];
+
+const restStopsBase: { light: string; base: string; label: string }[] = [
+  { light: '#D9BC8E', base: '#C7A671', label: 'Recém-liberado' },
+  { light: '#E0D49C', base: '#D6C47E', label: 'Rebrotando' },
+  { light: '#C6D9A6', base: '#B7CE93', label: 'Descansado' },
+  { light: '#A8C580', base: '#8FB265', label: 'Pronto' },
 ];
 
 export const gameTokens = {
   colors: baseColors,
+  occupiedStops: occupiedStopsBase,
   restStops: restStopsBase,
   motion: {
     /** Pastar: faixa de duração do vagar lento das vacas (por vaca, semeado). */
@@ -84,6 +93,8 @@ export const gameTokens = {
 } as const;
 
 type SeasonalOverride = Partial<Pick<typeof baseColors, 'grass' | 'grassLight' | 'meadowEdge' | 'tree' | 'treeShade'>> & {
+  occupiedLight?: string[];
+  occupiedBase?: string[];
   restLight?: string[];
   restBase?: string[];
 };
@@ -95,8 +106,10 @@ const SEASONAL: Record<Season, SeasonalOverride> = {
     grass: '#B4C78E',
     grassLight: '#C6D6A2',
     tree: '#74975A',
-    restLight: ['#BBD69A', '#C9DCA9', '#D8DCA4', '#E0D49C', '#D9BC8E'],
-    restBase: ['#ABC686', '#BBD196', '#CDD18D', '#D6C47E', '#C7A671'],
+    occupiedLight: ['#BBD69A', '#D0DBA0', '#E0D49C', '#D9BC8E'],
+    occupiedBase: ['#ABC686', '#C0CE8B', '#D6C47E', '#C7A671'],
+    restLight: ['#D9BC8E', '#E0D49C', '#C9DCA9', '#B2CE92'],
+    restBase: ['#C7A671', '#D6C47E', '#BBD196', '#9CBE74'],
   },
   outono: {
     grass: '#B3B98A',
@@ -111,8 +124,10 @@ const SEASONAL: Record<Season, SeasonalOverride> = {
     meadowEdge: '#9A9168',
     tree: '#74805C',
     treeShade: '#606B4B',
-    restLight: ['#C2C493', '#CFC99C', '#DCD1A0', '#E2D09E', '#D9BC8E'],
-    restBase: ['#B2B47E', '#C0BA87', '#CEC187', '#D2BE7E', '#C7A671'],
+    occupiedLight: ['#C2C493', '#CFC99C', '#E2D09E', '#D9BC8E'],
+    occupiedBase: ['#B2B47E', '#C0BA87', '#D2BE7E', '#C7A671'],
+    restLight: ['#D9BC8E', '#E2D09E', '#DCD1A0', '#C2C493'],
+    restBase: ['#C7A671', '#D2BE7E', '#CEC187', '#B2B47E'],
   },
 };
 
@@ -121,13 +136,28 @@ export function seasonalColors(season: Season): typeof baseColors {
   return { ...baseColors, ...SEASONAL[season] };
 }
 
-/** Faixas do gradiente de descanso tingidas pela estação. */
+/** Faixas do gradiente tingidas pela estação (genérico para os dois eixos). */
+function seasonalStops<T extends { light: string; base: string; label: string }>(
+  stops: readonly T[],
+  light: string[] | undefined,
+  base: string[] | undefined,
+): T[] {
+  if (!light && !base) return [...stops];
+  return stops.map((stop, index) => ({
+    ...stop,
+    light: light?.[index] ?? stop.light,
+    base: base?.[index] ?? stop.base,
+  }));
+}
+
+/** Faixas do gradiente de OCUPAÇÃO (verde → marrom) tingidas pela estação. */
+export function seasonalOccupiedStops(season: Season): typeof occupiedStopsBase {
+  const override = SEASONAL[season];
+  return seasonalStops(occupiedStopsBase, override.occupiedLight, override.occupiedBase);
+}
+
+/** Faixas do gradiente de DESCANSO (marrom → verde) tingidas pela estação. */
 export function seasonalRestStops(season: Season): typeof restStopsBase {
   const override = SEASONAL[season];
-  if (!override.restLight && !override.restBase) return restStopsBase;
-  return restStopsBase.map((stop, index) => ({
-    ...stop,
-    light: override.restLight?.[index] ?? stop.light,
-    base: override.restBase?.[index] ?? stop.base,
-  }));
+  return seasonalStops(restStopsBase, override.restLight, override.restBase);
 }

@@ -25,7 +25,8 @@ abertas. Mudanças aqui exigem nova decisão registrada em `docs/DECISIONS.md`.
 
 - **`/mapa` (utilitário):** Leaflet + satélite ESRI, para desenhar e editar
   polígonos de Pastos e pontos de Instalações. É a ferramenta de cadastro
-  espacial.
+  espacial — fora da navegação principal: acessada pelo botão "Editar mapa" no
+  HUD do `/jogo`, com link de volta ao Jogo no topo.
 - **`/jogo` (tabuleiro):** SVG estilizado derivado das geometrias reais, para a
   operação rápida de pastejo — clicar num Pasto e mover um Lote para ele. Não
   edita geometrias.

@@ -42,22 +42,50 @@ export function openOccupancyOfPasture(
   return occupancies.find((o) => o.pastureId === pastureId && o.end === null) ?? null;
 }
 
+/** Dias completos desde o início da ocupação ABERTA do pasto; null se livre. */
+export function occupationDays(
+  pastureId: string,
+  occupancies: PastureOccupancy[],
+  now: Date = new Date(),
+): number | null {
+  const open = openOccupancyOfPasture(pastureId, occupancies);
+  if (!open) return null;
+  return Math.max(0, Math.floor((now.getTime() - dateValue(open.start)) / MS_PER_DAY));
+}
+
+export type PastureVisualState = 'occupied' | 'resting' | 'never';
+
+export interface PastureVisual {
+  state: PastureVisualState;
+  /** Dias de ocupação (occupied) ou de descanso (resting); null quando nunca pastejado. */
+  days: number | null;
+  /** Faixa 0..3 dentro do eixo (ver a regra abaixo). */
+  bucket: number;
+}
+
 /**
- * Faixa de descanso para o gradiente do tabuleiro: 0 = em pastejo (ocupado
- * ou descanso desde hoje) … `buckets - 1` = muitos dias de descanso. Pasto
- * nunca pastejado cai na última faixa (máximo descanso conhecido). As faixas
- * casam com os rótulos da legenda (tokens.ts): em pastejo, até 1 semana
- * (1–7d), até 3 semanas (8–21d), até 1,5 mês (22–45d), muito descanso (46d+).
+ * Faixa visual do pasto no tabuleiro, com a semântica agronômica do pastejo —
+ * os dois eixos têm gradientes próprios (tokens.ts):
+ * - OCUPADO: começa verde e marronheia quanto mais tempo o Lote fica no pasto
+ *   (capim sendo comido): 0–7d → 0, 8–14d → 1, 15–21d → 2, 22d+ → 3.
+ * - LIVRE (descanso): começa marrom (recém-saído, capim comido) e esverdeia
+ *   com a rebrota: 0–7d → 0, 8–21d → 1, 22–45d → 2, 46d+ → 3.
+ * - Nunca pastejado: capim intocado, verde profundo (última faixa do descanso).
  */
-export function restBucket(days: number | null, buckets = 5): number {
-  if (days === null) return buckets - 1;
-  if (days <= 0) return 0;
-  const step = [0, 1, 8, 22, 46]; // limites inferiores de cada faixa (dias)
-  let bucket = 0;
-  for (let index = 0; index < Math.min(step.length, buckets); index += 1) {
-    if (days >= step[index]) bucket = index;
+export function pastureBucket(
+  pastureId: string,
+  occupancies: PastureOccupancy[],
+  now: Date = new Date(),
+): PastureVisual {
+  const occupied = occupationDays(pastureId, occupancies, now);
+  if (occupied !== null) {
+    const bucket = occupied <= 7 ? 0 : occupied <= 14 ? 1 : occupied <= 21 ? 2 : 3;
+    return { state: 'occupied', days: occupied, bucket };
   }
-  return Math.min(bucket, buckets - 1);
+  const rest = daysSinceLastOccupancy(pastureId, occupancies, now);
+  if (rest === null) return { state: 'never', days: null, bucket: 3 };
+  const bucket = rest <= 7 ? 0 : rest <= 21 ? 1 : rest <= 45 ? 2 : 3;
+  return { state: 'resting', days: rest, bucket };
 }
 
 /**

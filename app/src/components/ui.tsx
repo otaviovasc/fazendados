@@ -263,6 +263,16 @@ export function Sheet({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  // Trava o scroll do fundo enquanto a folha está aberta (comportamento nativo).
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[1100] flex items-end sm:items-center justify-center">

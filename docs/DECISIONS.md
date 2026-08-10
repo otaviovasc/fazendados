@@ -299,7 +299,9 @@ escopo já descontinuado (D-002, D-030, D-032). O áudio é reduzido a soundtrac
 e clique (arquivos mp3 copiados); o sintetizador WebAudio do jogo original foi
 descartado. Melhorias incorporadas ao /jogo: descanso do Pasto visível,
 sugestão de próximo Pasto, resumo do dia no HUD, atalho de registro pelo
-Assistente nas Instalações e paleta que varia por estação do ano.
+Assistente nas Instalações e paleta que varia por estação do ano. Adendo: o
+`/mapa` saiu da navegação principal e virou ferramenta de edição acessada de
+dentro do `/jogo` (botão "Editar mapa" no HUD), mantendo a rota ativa.
 
 ### D-041 — PWA do app inteiro com auto-update
 
