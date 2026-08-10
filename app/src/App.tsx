@@ -13,6 +13,7 @@ import {
   Menu as MenuIcon,
 } from "lucide-react";
 import { useFarm, pendingProposals } from "./state/store";
+import { ThemeToggle } from "./components/ThemeToggle";
 import InicioPage from "./modules/inicio";
 import AssistentePage from "./modules/assistente";
 import LeitePage from "./modules/leite";
@@ -64,7 +65,7 @@ export default function App() {
     <div className="min-h-dvh md:flex">
       <ScrollToTop />
       {/* Sidebar desktop */}
-      <aside className="hidden md:flex flex-col w-60 shrink-0 border-r border-black/5 bg-paper-card px-3 py-5 sticky top-0 h-dvh">
+      <aside className="hidden md:flex flex-col w-60 shrink-0 border-r border-ink/5 bg-paper-card px-3 py-5 sticky top-0 h-dvh">
         <div className="px-3 mb-6">
           <img src="/brand/logo-complete.webp" alt="FazenDados" className="h-9 w-auto" />
           <p className="text-xs text-ink-soft mt-1.5">{state.farm.name}</p>
@@ -91,6 +92,9 @@ export default function App() {
             </NavLink>
           ))}
         </nav>
+        <div className="mt-auto">
+          <ThemeToggle />
+        </div>
       </aside>
 
       {/* Conteúdo */}
@@ -113,7 +117,7 @@ export default function App() {
       </main>
 
       {/* Bottom nav mobile */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-paper-card/95 backdrop-blur border-t border-black/5 safe-bottom select-none">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-paper-card/95 backdrop-blur border-t border-ink/5 safe-bottom select-none">
         <div className="grid grid-cols-5">
           {MOBILE_NAV.map(({ to, label, icon: Icon, end }) => (
             <NavLink
@@ -169,6 +173,9 @@ export default function App() {
               {label}
             </NavLink>
           ))}
+        </div>
+        <div className="mt-3">
+          <ThemeToggle />
         </div>
       </Sheet>
     </div>

@@ -15,13 +15,13 @@ const SATELLITE_URL =
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 const OSM_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 
-// Cores alinhadas aos tokens do projeto (tailwind.config.js).
-const PASTURE_500 = "#3E6B42";
-const PASTURE_700 = "#264229";
-const INK = "#1C1917";
-const INK_FAINT = "#A8A29E";
-const PAPER = "#FAF7F1";
-const REVIEW_500 = "#B45309";
+// Cores alinhadas aos tokens do projeto (variáveis CSS do tema — ver index.css).
+const PASTURE_500 = "rgb(var(--pasture-500))";
+const PASTURE_700 = "rgb(var(--pasture-700))";
+const INK = "rgb(var(--ink))";
+const INK_FAINT = "rgb(var(--ink-faint))";
+const PAPER = "rgb(var(--paper))";
+const REVIEW_500 = "rgb(var(--review-500))";
 
 interface MapViewProps {
   mode: MapMode;

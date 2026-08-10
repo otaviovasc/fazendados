@@ -1,36 +1,37 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  darkMode: "class",
   theme: {
     extend: {
       colors: {
         paper: {
-          DEFAULT: "#FAF7F1",
-          sunken: "#F3EEE5",
-          card: "#FFFFFF",
+          DEFAULT: "rgb(var(--paper) / <alpha-value>)",
+          sunken: "rgb(var(--paper-sunken) / <alpha-value>)",
+          card: "rgb(var(--paper-card) / <alpha-value>)",
         },
         ink: {
-          DEFAULT: "#1C1917",
-          soft: "#57534E",
-          faint: "#A8A29E",
+          DEFAULT: "rgb(var(--ink) / <alpha-value>)",
+          soft: "rgb(var(--ink-soft) / <alpha-value>)",
+          faint: "rgb(var(--ink-faint) / <alpha-value>)",
         },
         pasture: {
-          50: "#F0F5EF",
-          100: "#DCE8DA",
-          200: "#B7D1B4",
-          500: "#3E6B42",
-          600: "#2F5233",
-          700: "#264229",
-          900: "#18291B",
+          50: "rgb(var(--pasture-50) / <alpha-value>)",
+          100: "rgb(var(--pasture-100) / <alpha-value>)",
+          200: "rgb(var(--pasture-200) / <alpha-value>)",
+          500: "rgb(var(--pasture-500) / <alpha-value>)",
+          600: "rgb(var(--pasture-600) / <alpha-value>)",
+          700: "rgb(var(--pasture-700) / <alpha-value>)",
+          900: "rgb(var(--pasture-900) / <alpha-value>)",
         },
         review: {
-          100: "#FBEED3",
-          500: "#B45309",
-          700: "#92400E",
+          100: "rgb(var(--review-100) / <alpha-value>)",
+          500: "rgb(var(--review-500) / <alpha-value>)",
+          700: "rgb(var(--review-700) / <alpha-value>)",
         },
         danger: {
-          100: "#FBE4E4",
-          600: "#B91C1C",
+          100: "rgb(var(--danger-100) / <alpha-value>)",
+          600: "rgb(var(--danger-600) / <alpha-value>)",
         },
       },
       fontFamily: {

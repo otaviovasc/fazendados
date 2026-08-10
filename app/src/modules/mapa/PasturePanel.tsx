@@ -85,7 +85,7 @@ export function PasturePanel({ pastureId, onClose, onEdit }: PasturePanelProps) 
             Nenhuma ocupação registrada neste pasto.
           </p>
         ) : (
-          <ul className="divide-y divide-black/5">
+          <ul className="divide-y divide-ink/5">
             {history.map((o) => (
               <li
                 key={o.id}

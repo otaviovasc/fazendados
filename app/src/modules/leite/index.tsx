@@ -23,7 +23,7 @@ export default function LeitePage() {
               `shrink-0 rounded-full px-4 min-h-[44px] inline-flex items-center text-sm font-medium transition ${
                 isActive
                   ? "bg-pasture-600 text-white"
-                  : "bg-paper-card border border-black/5 text-ink-soft hover:bg-pasture-100"
+                  : "bg-paper-card border border-ink/5 text-ink-soft hover:bg-pasture-100"
               }`
             }
           >

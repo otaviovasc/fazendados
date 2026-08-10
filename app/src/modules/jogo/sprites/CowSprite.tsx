@@ -1,11 +1,11 @@
-import { gameTokens } from '../tokens';
+import { gameTokens, useBoardColors } from '../tokens';
 
 /**
  * Vaca vista de cima (grid 64): corpo, cabeça, orelhas e manchas — flat, sem
  * contorno. `flip` espelha para o rebanho não parecer carimbado.
  */
 export function CowSprite({ x, y, size = 26, flip = false }: { x: number; y: number; size?: number; flip?: boolean }) {
-  const { cow, cowSpot } = gameTokens.colors;
+  const { cow, cowSpot } = useBoardColors();
   const scale = size / gameTokens.sprite.grid;
   return <g transform={`translate(${x} ${y}) scale(${flip ? -scale : scale} ${scale}) translate(-32 -32)`} aria-hidden>
     <ellipse cx="32" cy="38" rx="14" ry="19" fill={cow} />

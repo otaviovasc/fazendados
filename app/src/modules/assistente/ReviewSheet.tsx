@@ -607,7 +607,7 @@ export function ReviewSheet({
   return (
     <div className="fixed inset-0 z-[1100] bg-paper flex flex-col animate-sheet">
       {/* Cabeçalho */}
-      <header className="flex items-center gap-2 px-4 py-3 border-b border-black/5 bg-paper-card shrink-0">
+      <header className="flex items-center gap-2 px-4 py-3 border-b border-ink/5 bg-paper-card shrink-0">
         <button
           onClick={requestClose}
           aria-label="Fechar revisão"
@@ -630,7 +630,7 @@ export function ReviewSheet({
           {/* 1 · Origem */}
           <section>
             <StepTitle n={1}>Origem</StepTitle>
-            <div className="rounded-2xl border border-black/5 bg-paper-card p-4">
+            <div className="rounded-2xl border border-ink/5 bg-paper-card p-4">
               <div className="flex items-center gap-2 mb-2">
                 <FactNatureChip nature="captura" />
                 {capture && (
@@ -657,7 +657,7 @@ export function ReviewSheet({
                   <img
                     src={captureAttachmentUrl(capture.id, id)}
                     alt="Foto original da Captura"
-                    className="mt-2 max-h-80 w-full rounded-xl border border-black/10 object-contain bg-ink/[0.02]"
+                    className="mt-2 max-h-80 w-full rounded-xl border border-ink/10 object-contain bg-ink/[0.02]"
                   />
                 </details>
               ))}
@@ -667,7 +667,7 @@ export function ReviewSheet({
           {/* 2 · Contexto */}
           <section>
             <StepTitle n={2}>Contexto reconhecido</StepTitle>
-            <div className="rounded-2xl border border-black/5 bg-paper-card divide-y divide-black/5">
+            <div className="rounded-2xl border border-ink/5 bg-paper-card divide-y divide-ink/5">
               {contextItems.length === 0 && (
                 <p className="p-4 text-sm text-ink-faint">
                   Nenhum contexto identificado.
@@ -688,7 +688,7 @@ export function ReviewSheet({
           {/* 3 · Fatos */}
           <section>
             <StepTitle n={3}>Fatos a revisar</StepTitle>
-            <div className="rounded-2xl border border-black/5 bg-paper-card p-4 space-y-4">
+            <div className="rounded-2xl border border-ink/5 bg-paper-card p-4 space-y-4">
               <div className="flex items-center gap-2">
                 <Chip tone="proposta">{KIND_LABEL[proposal.kind]}</Chip>
               </div>
@@ -782,9 +782,9 @@ export function ReviewSheet({
                           key={`${r.rawLabel}-${i}`}
                           className={`rounded-xl border p-3 ${
                             r.discarded
-                              ? "border-black/10 bg-ink/[0.03]"
+                              ? "border-ink/10 bg-ink/[0.03]"
                               : ok
-                              ? "border-black/5"
+                              ? "border-ink/5"
                               : "border-review-500/40 bg-review-100/50"
                           }`}
                         >
@@ -882,7 +882,7 @@ export function ReviewSheet({
                                 <label className="mt-2 block text-xs font-semibold">
                                   Corrigir vínculo desta linha
                                   <select
-                                    className={`${inputCls} mt-1 bg-white text-ink`}
+                                    className={`${inputCls} mt-1 bg-paper-card text-ink`}
                                     value={r.animalId ?? ""}
                                     onChange={(event) => {
                                       const animal = state.animals.find(
@@ -937,13 +937,13 @@ export function ReviewSheet({
                               <div className="mt-3 grid gap-2">
                                 <button
                                   onClick={() => chooseAssignmentAction(i, "move")}
-                                  className={`min-h-[44px] rounded-xl border px-3 text-left text-sm font-semibold ${r.assignmentAction === "move" && assignmentDecisionCurrent ? "border-pasture-600 bg-pasture-100 text-pasture-800" : "border-review-500/50 bg-white text-review-700"}`}
+                                  className={`min-h-[44px] rounded-xl border px-3 text-left text-sm font-semibold ${r.assignmentAction === "move" && assignmentDecisionCurrent ? "border-pasture-600 bg-pasture-100 text-pasture-800" : "border-review-500/50 bg-paper-card text-review-700"}`}
                                 >
                                   Mover para {resolvedGroup?.name} em {formatLong(reviewedDate)}
                                 </button>
                                 <button
                                   onClick={() => chooseAssignmentAction(i, "keep")}
-                                  className={`min-h-[44px] rounded-xl border px-3 text-left text-sm font-semibold ${r.assignmentAction === "keep" && assignmentDecisionCurrent ? "border-pasture-600 bg-pasture-100 text-pasture-800" : "border-review-500/50 bg-white text-review-700"}`}
+                                  className={`min-h-[44px] rounded-xl border px-3 text-left text-sm font-semibold ${r.assignmentAction === "keep" && assignmentDecisionCurrent ? "border-pasture-600 bg-pasture-100 text-pasture-800" : "border-review-500/50 bg-paper-card text-review-700"}`}
                                 >
                                   {assignment.currentGroup
                                     ? `Manter no ${assignment.currentGroup.name} e registrar só a Medição`
@@ -967,7 +967,7 @@ export function ReviewSheet({
                                   <button
                                     key={s.animal.id}
                                     onClick={() => bindRow(i, s.animal)}
-                                    className="inline-flex items-center rounded-full border border-review-500/50 bg-white text-review-700 px-3 min-h-[44px] text-sm font-medium"
+                                    className="inline-flex items-center rounded-full border border-review-500/50 bg-paper-card text-review-700 px-3 min-h-[44px] text-sm font-medium"
                                   >
                                     {s.via === "nome" ? (
                                       <Highlighted
@@ -996,13 +996,13 @@ export function ReviewSheet({
                                 ))}
                                 <button
                                   onClick={() => openCadastro(i)}
-                                  className="inline-flex items-center gap-1.5 rounded-full border border-pasture-500 bg-white text-pasture-700 px-3 min-h-[44px] text-sm font-semibold"
+                                  className="inline-flex items-center gap-1.5 rounded-full border border-pasture-500 bg-paper-card text-pasture-700 px-3 min-h-[44px] text-sm font-semibold"
                                 >
                                   <UserPlus size={15} /> Cadastrar animal
                                 </button>
                               </div>
                               {cadastro?.row === i && (
-                                <div className="mt-3 space-y-2 border-t border-black/5 pt-3">
+                                <div className="mt-3 space-y-2 border-t border-ink/5 pt-3">
                                   <Field label="Nome do animal">
                                     <input
                                       className={inputCls}
@@ -1033,7 +1033,7 @@ export function ReviewSheet({
                                     if (cadastroDuplicate) return (
                                       <div className="rounded-xl border border-review-500/40 bg-review-100 p-3">
                                         <p className="text-xs text-review-700">Já existe um Animal com esse nome ou brinco.</p>
-                                        <button onClick={() => bindRow(i, cadastroDuplicate)} className="mt-2 min-h-[44px] rounded-xl border border-pasture-500 bg-white px-3 text-sm font-semibold text-pasture-700">
+                                        <button onClick={() => bindRow(i, cadastroDuplicate)} className="mt-2 min-h-[44px] rounded-xl border border-pasture-500 bg-paper-card px-3 text-sm font-semibold text-pasture-700">
                                           Vincular a {cadastroDuplicate.name}{cadastroDuplicate.tag ? ` · ${cadastroDuplicate.tag}` : ""}
                                         </button>
                                       </div>
@@ -1044,7 +1044,7 @@ export function ReviewSheet({
                                         <p className="text-xs text-review-700">Antes de cadastrar, confira estes Animais parecidos:</p>
                                         <div className="mt-2 flex flex-wrap gap-1.5">
                                           {cadastroSuggestions.map((suggestion) => (
-                                            <button key={suggestion.animal.id} onClick={() => bindRow(i, suggestion.animal)} className="min-h-[44px] rounded-full border border-review-500/50 bg-white px-3 text-sm font-medium text-review-700">
+                                            <button key={suggestion.animal.id} onClick={() => bindRow(i, suggestion.animal)} className="min-h-[44px] rounded-full border border-review-500/50 bg-paper-card px-3 text-sm font-medium text-review-700">
                                               Vincular a {suggestion.animal.name}{suggestion.animal.tag ? ` · ${suggestion.animal.tag}` : ""}
                                             </button>
                                           ))}
@@ -1128,7 +1128,7 @@ export function ReviewSheet({
           {/* 4 · Consequências */}
           <section>
             <StepTitle n={4}>Consequências</StepTitle>
-            <div className="rounded-2xl border border-black/5 bg-paper-card p-4">
+            <div className="rounded-2xl border border-ink/5 bg-paper-card p-4">
               <p className="text-sm text-ink-soft mb-3">
                 Ao confirmar, vira Registro:
               </p>
@@ -1180,7 +1180,7 @@ export function ReviewSheet({
       </div>
 
       {/* Rodapé — ações */}
-      <footer className="border-t border-black/5 bg-paper-card px-4 py-3 safe-bottom shrink-0">
+      <footer className="border-t border-ink/5 bg-paper-card px-4 py-3 safe-bottom shrink-0">
         <div className="mx-auto max-w-2xl">
           {dismissing ? (
             <div className="space-y-3">

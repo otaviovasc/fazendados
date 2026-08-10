@@ -5,7 +5,7 @@ import { pastureBucket, type PastureVisual } from '../../../domain/game/pasture-
 import { toPathData, type GameProjection } from '../../../domain/game/projection';
 import type { FarmBoundary, Pasture, PastureOccupancy } from '../../../domain/types';
 import { TreeSprite } from '../sprites/TreeSprite';
-import { gameTokens, type Season } from '../tokens';
+import { gameTokens, useBoardColors, type Season } from '../tokens';
 
 /**
  * Perímetro (diorama gramado com cerca de mourões) + pastos cercados. O chão
@@ -41,7 +41,7 @@ export function ZoneLayer({ boundary, pastures, occupancies, projection, season,
   /** true quando o último gesto foi arrasto (pan) — o click é suprimido. */
   didDrag?: () => boolean;
 }) {
-  const { colors } = gameTokens;
+  const colors = useBoardColors();
 
   const perimeterProjected = useMemo(
     () => boundary.polygon.map(projection.toLocal),

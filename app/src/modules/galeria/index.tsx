@@ -191,7 +191,7 @@ function PreviewSheet({ item, onClose }: { item: GalleryItem | null; onClose: ()
   if (!item) return null;
   const url = captureAttachmentUrl(item.capture.id, item.attachment.id);
   return <Sheet open onClose={onClose} title={attachmentName(item.attachment)} footer={<a className="inline-flex items-center justify-center gap-2 rounded-xl bg-pasture-600 text-white px-4 py-2.5 text-sm font-semibold min-h-[44px] w-full" href={`${url}?download=1`}><Download size={16} /> Baixar arquivo</a>}>
-    {isImage(item.attachment) ? <img src={url} alt={attachmentName(item.attachment)} className="w-full max-h-[60vh] object-contain rounded-xl bg-paper-sunken" /> : isAudio(item.attachment) ? <audio controls src={url} className="w-full" /> : <iframe title={attachmentName(item.attachment)} src={url} className="w-full h-[60vh] rounded-xl border border-black/10" />}
+    {isImage(item.attachment) ? <img src={url} alt={attachmentName(item.attachment)} className="w-full max-h-[60vh] object-contain rounded-xl bg-paper-sunken" /> : isAudio(item.attachment) ? <audio controls src={url} className="w-full" /> : <iframe title={attachmentName(item.attachment)} src={url} className="w-full h-[60vh] rounded-xl border border-ink/10" />}
     <p className="text-xs text-ink-faint mt-3">{CATEGORY_LABEL[attachmentCategory(item.attachment)]} · {formatWhen(item.capture.createdAt)}</p>
   </Sheet>;
 }

@@ -92,7 +92,7 @@ export function PastureSheet({
 
         {view === "view" && (
           <>
-            <div className="rounded-2xl border border-black/5 bg-paper-sunken px-4 py-3">
+            <div className="rounded-2xl border border-ink/5 bg-paper-sunken px-4 py-3">
               {occupancy && groupOfOccupancy ? (
                 <p className="text-sm">
                   <span className="font-medium">{groupOfOccupancy.name}</span>{" "}
@@ -112,7 +112,7 @@ export function PastureSheet({
                 <button
                   type="button"
                   onClick={startPick}
-                  className="w-full flex items-center gap-3 rounded-xl border border-black/10 bg-white px-3.5 py-3 text-left min-h-[44px] transition hover:border-pasture-200"
+                  className="w-full flex items-center gap-3 rounded-xl border border-ink/10 bg-paper-card px-3.5 py-3 text-left min-h-[44px] transition hover:border-pasture-200"
                 >
                   <ArrowRightLeft size={20} className="text-pasture-600 shrink-0" />
                   <span>
@@ -127,7 +127,7 @@ export function PastureSheet({
                 <button
                   type="button"
                   onClick={startPick}
-                  className="w-full flex items-center gap-3 rounded-xl border border-black/10 bg-white px-3.5 py-3 text-left min-h-[44px] transition hover:border-pasture-200"
+                  className="w-full flex items-center gap-3 rounded-xl border border-ink/10 bg-paper-card px-3.5 py-3 text-left min-h-[44px] transition hover:border-pasture-200"
                 >
                   <ArrowRightLeft size={20} className="text-pasture-600 shrink-0" />
                   <span>

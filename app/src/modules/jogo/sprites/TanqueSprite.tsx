@@ -1,11 +1,11 @@
-import { gameTokens } from '../tokens';
+import { gameTokens, useBoardColors } from '../tokens';
 
 /**
  * Tanque de leite visto de cima (grid 64): cilindro de metal sobre uma base de
  * concreto, tampa clara ao centro. Sem medidor — o tabuleiro não mostra nível.
  */
 export function TanqueSprite({ x, y, size = 56 }: { x: number; y: number; size?: number }) {
-  const { dirt, steel, milk, ink } = gameTokens.colors;
+  const { dirt, steel, milk, ink } = useBoardColors();
   const scale = size / gameTokens.sprite.grid;
   return <g transform={`translate(${x} ${y}) scale(${scale}) translate(-32 -32)`} aria-hidden>
     <ellipse cx="32" cy="36" rx="24" ry="18" fill={dirt} opacity="0.7" />

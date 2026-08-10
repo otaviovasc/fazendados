@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { pendingProposals, productionFor, today, useFarm } from '../../state/store';
 import { useGameAudio } from './audio/useGameAudio';
+import { useDarkMode } from '../../theme';
 import { seasonalOccupiedStops, seasonalRestStops, type Season } from './tokens';
 
 /**
@@ -15,6 +16,7 @@ export function GameShell({ children, season }: { children: ReactNode; season: S
   const { state } = useFarm();
   const { muted, toggleMuted } = useGameAudio();
   const navigate = useNavigate();
+  const dark = useDarkMode();
 
   const production = productionFor(state, today());
   const pending = pendingProposals(state).length;
@@ -29,7 +31,7 @@ export function GameShell({ children, season }: { children: ReactNode; season: S
           type="button"
           onClick={toggleMuted}
           aria-label={muted ? 'Ativar som' : 'Silenciar'}
-          className="grid size-11 place-items-center rounded-full bg-paper-card/90 shadow-md border border-black/5 text-ink-soft"
+          className="grid size-11 place-items-center rounded-full bg-paper-card/90 shadow-md border border-ink/5 text-ink-soft"
         >
           {muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
         </button>
@@ -37,7 +39,7 @@ export function GameShell({ children, season }: { children: ReactNode; season: S
           type="button"
           onClick={() => navigate('/mapa')}
           aria-label="Editar mapa"
-          className="grid size-11 place-items-center rounded-full bg-paper-card/90 shadow-md border border-black/5 text-ink-soft"
+          className="grid size-11 place-items-center rounded-full bg-paper-card/90 shadow-md border border-ink/5 text-ink-soft"
         >
           <Pencil size={20} />
         </button>
@@ -46,7 +48,7 @@ export function GameShell({ children, season }: { children: ReactNode; season: S
       <button
         type="button"
         onClick={() => navigate('/assistente')}
-        className="pointer-events-auto flex items-center gap-2.5 rounded-full bg-paper-card/90 shadow-md border border-black/5 pl-3.5 pr-2.5 py-2 text-left"
+        className="pointer-events-auto flex items-center gap-2.5 rounded-full bg-paper-card/90 shadow-md border border-ink/5 pl-3.5 pr-2.5 py-2 text-left"
         aria-label={`Resumo do dia — abrir revisão do Assistente${pending > 0 ? ` (${pending} pendências)` : ''}`}
       >
         <span className="flex items-center gap-1.5 text-sm font-semibold tnum">
@@ -65,11 +67,11 @@ export function GameShell({ children, season }: { children: ReactNode; season: S
 
     {/* Legenda do estado dos pastos (canto inferior esquerdo): ocupado
         marronheia com os dias de pastejo; livre esverdeia com o descanso. */}
-    <div className="pointer-events-none absolute left-3 bottom-3 z-10 rounded-2xl bg-paper-card/90 shadow-md border border-black/5 px-3 py-2">
+    <div className="pointer-events-none absolute left-3 bottom-3 z-10 rounded-2xl bg-paper-card/90 shadow-md border border-ink/5 px-3 py-2">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint mb-1.5">Estado do pasto</p>
       {([
-        ['Em pastejo', seasonalOccupiedStops(season)],
-        ['Em descanso', seasonalRestStops(season)],
+        ['Em pastejo', seasonalOccupiedStops(season, dark)],
+        ['Em descanso', seasonalRestStops(season, dark)],
       ] as const).map(([group, stops]) => (
         <div key={group} className="mb-1.5 last:mb-0">
           <p className="text-[9px] font-medium uppercase tracking-wide text-ink-faint mb-0.5">{group}</p>
@@ -77,7 +79,7 @@ export function GameShell({ children, season }: { children: ReactNode; season: S
             {stops.map((stop) => (
               <li key={stop.label} className="flex items-center gap-1.5 text-[11px] text-ink-soft">
                 <span
-                  className="inline-block size-3 rounded-sm border border-black/10"
+                  className="inline-block size-3 rounded-sm border border-ink/10"
                   style={{ background: `linear-gradient(135deg, ${stop.light}, ${stop.base})` }}
                 />
                 {stop.label}

@@ -229,20 +229,20 @@ function MonthChart({
       <div className="h-44 md:h-52 -mx-1">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={dados} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-            <CartesianGrid vertical={false} stroke="rgba(0,0,0,0.06)" />
+            <CartesianGrid vertical={false} stroke="rgb(var(--ink) / 0.06)" />
             <XAxis
               dataKey="label"
               tickLine={false}
               axisLine={false}
               minTickGap={24}
-              tick={{ fontSize: 11, fill: "#A8A29E" }}
+              tick={{ fontSize: 11, fill: "rgb(var(--ink-faint))" }}
             />
             <YAxis
               width={40}
               tickLine={false}
               axisLine={false}
               domain={["auto", "auto"]}
-              tick={{ fontSize: 11, fill: "#A8A29E" }}
+              tick={{ fontSize: 11, fill: "rgb(var(--ink-faint))" }}
               tickFormatter={(v: number) => String(Math.round(v))}
             />
             <Tooltip
@@ -261,9 +261,9 @@ function MonthChart({
             <Line
               type="monotone"
               dataKey="total"
-              stroke="#2F5233"
+              stroke="rgb(var(--pasture-600))"
               strokeWidth={2}
-              dot={{ r: 2.5, fill: "#2F5233", strokeWidth: 0 }}
+              dot={{ r: 2.5, fill: "rgb(var(--pasture-600))", strokeWidth: 0 }}
               activeDot={{ r: 4 }}
               connectNulls={false}
               isAnimationActive={false}
@@ -363,7 +363,7 @@ export default function ColetaTab() {
         />
 
         {/* Detalhe do dia selecionado */}
-        <div className="border-t border-black/5 px-4 py-3 md:px-5">
+        <div className="border-t border-ink/5 px-4 py-3 md:px-5">
           <div className="flex items-center justify-between gap-3 mb-1">
             <p className="font-medium capitalize">{formatLong(selectedDate)}</p>
             <button
@@ -378,7 +378,7 @@ export default function ColetaTab() {
               Sem coleta em {formatRelativeDay(selectedDate)}.
             </p>
           ) : (
-            <ul className="divide-y divide-black/5">
+            <ul className="divide-y divide-ink/5">
               {selectedList.map((c) => (
                 <li key={c.id} className="py-2.5 flex items-center gap-3">
                   <Truck size={16} className="text-ink-faint shrink-0" />
@@ -396,7 +396,7 @@ export default function ColetaTab() {
           )}
         </div>
 
-        <div className="border-t border-black/5">
+        <div className="border-t border-ink/5">
           <MonthChart month={month} byDate={byDate} />
         </div>
       </Card>

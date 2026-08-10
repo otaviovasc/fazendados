@@ -100,7 +100,7 @@ export function MonthCalendar({
               className={`flex flex-col items-center justify-center gap-0.5 min-h-[52px] rounded-xl transition-colors ${
                 isFuture
                   ? "opacity-30 cursor-default"
-                  : "hover:bg-black/5 active:bg-black/10"
+                  : "hover:bg-ink/5 active:bg-ink/10"
               } ${
                 isSelected
                   ? "ring-2 ring-inset ring-pasture-600"

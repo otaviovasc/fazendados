@@ -1,11 +1,11 @@
-import { gameTokens } from '../tokens';
+import { gameTokens, useBoardColors } from '../tokens';
 
 /**
  * Instalação genérica ("outro") vista de cima (grid 64): construção simples
  * com telhado no accent quente e um recorte de terreno.
  */
 export function OutroSprite({ x, y, size = 64 }: { x: number; y: number; size?: number }) {
-  const { dirt, roof, milk, ink } = gameTokens.colors;
+  const { dirt, roof, milk, ink } = useBoardColors();
   const scale = size / gameTokens.sprite.grid;
   return <g transform={`translate(${x} ${y}) scale(${scale}) translate(-32 -32)`} aria-hidden>
     <ellipse cx="32" cy="36" rx="25" ry="18" fill={dirt} opacity="0.7" />

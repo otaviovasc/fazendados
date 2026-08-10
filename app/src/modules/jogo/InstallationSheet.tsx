@@ -22,7 +22,7 @@ export function InstallationSheet({
   return (
     <Sheet open onClose={onClose} title={installation.name}>
       <div className="space-y-5">
-        <div className="rounded-2xl border border-black/5 bg-paper-sunken px-4 py-3">
+        <div className="rounded-2xl border border-ink/5 bg-paper-sunken px-4 py-3">
           <p className="text-sm text-ink-soft">
             {INSTALLATION_TYPE_LABEL[installation.type]}
           </p>
@@ -32,7 +32,7 @@ export function InstallationSheet({
           <Link
             to="/assistente"
             onClick={() => play("click")}
-            className="w-full flex items-center gap-3 rounded-xl border border-black/10 bg-white px-3.5 py-3 text-left min-h-[44px] transition hover:border-pasture-200"
+            className="w-full flex items-center gap-3 rounded-xl border border-ink/10 bg-paper-card px-3.5 py-3 text-left min-h-[44px] transition hover:border-pasture-200"
           >
             <Sparkles size={20} className="text-pasture-600 shrink-0" />
             <span>

@@ -311,7 +311,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
 
       {/* Falha de rede: fila pausada, nada foi perdido. */}
       {offline && (
-        <div className="fixed top-0 inset-x-0 z-[60] bg-ink text-white px-4 py-2.5 flex items-center justify-center gap-3 text-sm safe-top">
+        <div className="fixed top-0 inset-x-0 z-[60] bg-ink text-paper px-4 py-2.5 flex items-center justify-center gap-3 text-sm safe-top">
           <span>
             Sem conexão — {pendingCount}{" "}
             {pendingCount === 1 ? "alteração guardada" : "alterações guardadas"} para enviar.
@@ -325,11 +325,11 @@ export function FarmProvider({ children }: { children: ReactNode }) {
       {/* Erro de domínio devolvido pelo servidor. */}
       {syncError && !offline && (
         <div className="fixed bottom-20 md:bottom-6 inset-x-0 z-[60] flex justify-center px-4 pointer-events-none">
-          <div className="pointer-events-auto bg-ink text-white text-sm rounded-xl px-4 py-3 shadow-lg max-w-sm flex items-start gap-3">
+          <div className="pointer-events-auto bg-ink text-paper text-sm rounded-xl px-4 py-3 shadow-lg max-w-sm flex items-start gap-3">
             <span className="flex-1">{syncError.message}</span>
             <button
               onClick={() => setSyncError(null)}
-              className="text-white/70 hover:text-white shrink-0"
+              className="text-paper/70 hover:text-paper shrink-0"
               aria-label="Fechar aviso"
             >
               ✕

@@ -161,7 +161,7 @@ export default function MapaPage() {
         subtitle="Pastos, lotes e instalações da fazenda"
       />
 
-      <div className="mb-4 rounded-2xl border border-black/5 bg-paper-card px-4 py-3 text-sm text-ink-soft">
+      <div className="mb-4 rounded-2xl border border-ink/5 bg-paper-card px-4 py-3 text-sm text-ink-soft">
         <div className="flex flex-wrap gap-x-4 gap-y-1">
           <span className="font-medium text-ink">
             {state.farmBoundary ? "Perímetro oficial" : "Perímetro ainda não configurado"}
@@ -197,7 +197,7 @@ export default function MapaPage() {
         </Button>
       </div>
 
-      <div className="relative rounded-2xl overflow-hidden border border-black/5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+      <div className="relative rounded-2xl overflow-hidden border border-ink/5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
         <MapView
           mode={mode}
           drawPoints={drawPoints}
@@ -208,7 +208,7 @@ export default function MapaPage() {
 
         {mode !== "idle" && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[600] max-w-[calc(100%-1.5rem)]">
-            <p className="bg-ink text-white text-sm font-medium rounded-full px-4 py-2 shadow-lg text-center">
+            <p className="bg-ink text-paper text-sm font-medium rounded-full px-4 py-2 shadow-lg text-center">
               {mode === "draw"
                 ? `${editingPastureId ? "Redesenhando pasto" : "Desenhando pasto"} — redesenhe o polígono inteiro (${drawPoints.length} pontos) à medida que toca no mapa`
                 : mode === "boundary"

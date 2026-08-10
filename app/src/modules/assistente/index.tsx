@@ -236,7 +236,7 @@ export default function AssistentePage() {
           </span>
         </div>
         <textarea
-          className="w-full rounded-xl border border-black/10 bg-white px-3.5 py-2.5 text-base outline-none focus:border-pasture-500 focus:ring-2 focus:ring-pasture-100 transition min-h-24"
+          className="w-full rounded-xl border border-ink/10 bg-paper-card px-3.5 py-2.5 text-base outline-none focus:border-pasture-500 focus:ring-2 focus:ring-pasture-100 transition min-h-24"
           placeholder="Ex.: hoje a produção foi 348 litros e meio"
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -266,12 +266,12 @@ export default function AssistentePage() {
           }}
         />
         {photoPreview ? (
-          <div className="mt-3 rounded-2xl border border-black/10 bg-ink/[0.02] p-3">
+          <div className="mt-3 rounded-2xl border border-ink/10 bg-ink/[0.02] p-3">
             <div className="flex gap-3 items-start">
               <img
                 src={photoPreview}
                 alt="Prévia da foto selecionada"
-                className="size-20 rounded-xl object-cover border border-black/10"
+                className="size-20 rounded-xl object-cover border border-ink/10"
               />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium truncate">{photo?.name}</p>
@@ -294,7 +294,7 @@ export default function AssistentePage() {
             </div>
           </div>
         ) : storedAttachment ? (
-          <div className="mt-3 rounded-2xl border border-black/10 bg-ink/[0.02] p-3">
+          <div className="mt-3 rounded-2xl border border-ink/10 bg-ink/[0.02] p-3">
             <div className="flex gap-3 items-center">
               <div className="size-20 rounded-xl bg-paper-sunken grid place-items-center text-ink-faint shrink-0">
                 {storedAttachment.kind === "imagem" ? <img src={captureAttachmentUrl(storedAttachment.captureId, storedAttachment.id)} alt={storedAttachment.name ?? "Arquivo salvo"} className="size-full object-cover rounded-xl" /> : storedAttachment.kind === "audio" ? <AudioLines size={26} /> : <Images size={26} />}
@@ -566,7 +566,7 @@ function SavedAttachmentSheet({
         <div className="space-y-2">
           <p className="text-sm text-ink-soft mb-3">Escolha uma Captura já guardada. O arquivo será usado em uma nova Revisão.</p>
           {attachments.map((attachment) => (
-            <button key={attachment.id} type="button" onClick={() => onSelect(attachment)} className="w-full flex items-center gap-3 rounded-xl border border-black/5 p-3 text-left hover:bg-ink/[0.03] min-h-[64px]">
+            <button key={attachment.id} type="button" onClick={() => onSelect(attachment)} className="w-full flex items-center gap-3 rounded-xl border border-ink/5 p-3 text-left hover:bg-ink/[0.03] min-h-[64px]">
               <div className="size-12 rounded-lg bg-paper-sunken grid place-items-center overflow-hidden shrink-0">
                 {attachment.kind === "imagem" ? <img src={captureAttachmentUrl(attachment.captureId, attachment.id)} alt="" className="size-full object-cover" /> : attachment.kind === "audio" ? <AudioLines size={21} className="text-ink-faint" /> : <Images size={21} className="text-ink-faint" />}
               </div>

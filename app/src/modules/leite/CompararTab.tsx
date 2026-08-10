@@ -86,7 +86,7 @@ export default function CompararTab() {
       </Card>
 
       <SectionTitle>Últimos 14 dias</SectionTitle>
-      <Card className="divide-y divide-black/5 mb-6">
+      <Card className="divide-y divide-ink/5 mb-6">
         {rows.map((r) => (
           <div key={r.day} className="px-4 py-3.5 md:px-5">
             <p className="font-medium capitalize mb-2">
@@ -129,7 +129,7 @@ export default function CompararTab() {
           </p>
         </Card>
       ) : (
-        <Card className="divide-y divide-black/5">
+        <Card className="divide-y divide-ink/5">
           {corrections.map((c) => (
             <div key={c.id} className="px-4 py-3.5 md:px-5">
               <div className="flex items-start justify-between gap-3">

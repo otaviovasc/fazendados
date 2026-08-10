@@ -66,7 +66,7 @@ function VariacaoChip({ value }: { value: number | null }) {
   const Icon = abs < 0.05 ? Minus : value > 0 ? ArrowUpRight : ArrowDownRight;
   const tone =
     abs < 0.05
-      ? "text-ink-soft bg-black/5"
+      ? "text-ink-soft bg-ink/5"
       : value > 0
         ? "text-pasture-700 bg-pasture-100"
         : "text-danger-600 bg-danger-100";
@@ -89,7 +89,7 @@ function Sparkline({ totals }: { totals: { date: string; liters: number }[] }) {
       <Line
         type="monotone"
         dataKey="liters"
-        stroke="#2F5233"
+        stroke="rgb(var(--pasture-600))"
         strokeWidth={1.5}
         dot={false}
         isAnimationActive={false}
@@ -197,7 +197,7 @@ export default function RebanhoPage() {
             />
           )
         ) : (
-          <ul className="divide-y divide-black/5">
+          <ul className="divide-y divide-ink/5">
             {visible.map((a) => {
               const g = groupOf(state, a.id);
               const recentTotals = recentAnimalDailyTotals(state, a.id, 10);
@@ -243,7 +243,7 @@ export default function RebanhoPage() {
           </ul>
         )}
         {archivedCount > 0 && (
-          <div className="border-t border-black/5 px-4 py-2.5">
+          <div className="border-t border-ink/5 px-4 py-2.5">
             <button
               onClick={() => setShowArchived((v) => !v)}
               className="text-sm font-medium text-pasture-700 hover:text-pasture-900 min-h-[44px] -my-1 py-2"
@@ -266,7 +266,7 @@ export default function RebanhoPage() {
             hint="Toque em “Criar lote” acima para organizar os animais."
           />
         ) : (
-          <ul className="divide-y divide-black/5">
+          <ul className="divide-y divide-ink/5">
             {state.groups.map((g) => {
               const members = animalsInGroup(state, g.id).filter(
                 (a) => a.status === "ativo"
@@ -309,7 +309,7 @@ function FilterChip({
       className={`shrink-0 rounded-full px-3.5 py-2 text-sm font-medium transition min-h-[36px] ${
         active
           ? "bg-pasture-600 text-white"
-          : "bg-paper-card border border-black/10 text-ink-soft hover:bg-ink/5"
+          : "bg-paper-card border border-ink/10 text-ink-soft hover:bg-ink/5"
       }`}
     >
       {children}

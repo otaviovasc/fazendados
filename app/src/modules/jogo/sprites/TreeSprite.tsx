@@ -1,8 +1,10 @@
+import { useDarkMode } from '../../../theme';
 import { seasonalColors, type Season } from '../tokens';
 
 /** Árvore vista de cima: copa em dois tons, sombra sutil. Decoração pura; o tom segue a estação. */
 export function TreeSprite({ x, y, size = 30, season }: { x: number; y: number; size?: number; season: Season }) {
-  const { tree, treeShade, ink } = seasonalColors(season);
+  const dark = useDarkMode();
+  const { tree, treeShade, ink } = seasonalColors(season, dark);
   const scale = size / 64;
   return <g transform={`translate(${x} ${y}) scale(${scale}) translate(-32 -32)`} aria-hidden>
     <ellipse cx="35" cy="36" rx="21" ry="19" fill={ink} opacity="0.08" />

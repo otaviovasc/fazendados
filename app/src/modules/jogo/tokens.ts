@@ -6,7 +6,13 @@
  *
  * Estação visual (hemisfério sul): `seasonalColors` sobrepõe tons de grama,
  * pasto e copa conforme a época do ano — só cor de SVG, nenhuma regra muda.
+ *
+ * Tema escuro: `darkColors` e os stops noturnos substituem a paleta clara
+ * (as estações tingem apenas o tema claro). Componentes consomem via
+ * `useBoardColors`/`useDarkMode` para re-renderizar na troca de tema.
  */
+
+import { useDarkMode } from '../../theme';
 
 export type Season = 'verao' | 'outono' | 'inverno' | 'primavera';
 
@@ -35,6 +41,10 @@ const baseColors = {
   woodLightDark: '#95805D',
   /** Telhados — o accent quente; no máximo 2 destaques por cena. */
   roof: '#D98E73',
+  /** Água clara do telhado (face iluminada). */
+  roofLight: '#E3A188',
+  /** Painel superior do galpão de madeira (depósito). */
+  woodPanel: '#9C825F',
   /** Leite no tanque. */
   milk: '#FFF9EF',
   /** Metal do tanque. */
@@ -69,6 +79,48 @@ const restStopsBase: { light: string; base: string; label: string }[] = [
   { light: '#E0D49C', base: '#D6C47E', label: 'Rebrotando' },
   { light: '#C6D9A6', base: '#B7CE93', label: 'Descansado' },
   { light: '#A8C580', base: '#8FB265', label: 'Pronto' },
+];
+
+/**
+ * Paleta noturna do tabuleiro (tema escuro): mesma cena, tons terrosos
+ * profundos — grama e terra escurecem, madeira e telhado sobem um pouco de
+ * brilho para continuar legíveis, e a tinta vira off-white quente.
+ */
+const darkColors: typeof baseColors = {
+  grass: '#4A5738',
+  grassLight: '#566444',
+  meadowEdge: '#39432C',
+  dirt: '#5C4B34',
+  wood: '#8A7050',
+  woodDark: '#6B5638',
+  woodLight: '#7C6A4E',
+  woodLightDark: '#5F5038',
+  roof: '#C98A6F',
+  roofLight: '#D69F8A',
+  woodPanel: '#77644A',
+  milk: '#F5EEDF',
+  steel: '#7E92A4',
+  ink: '#EDE8DD',
+  tree: '#546C40',
+  treeShade: '#42552F',
+  cow: '#E4DCCC',
+  cowSpot: '#3B352C',
+};
+
+/** Stops noturnos de OCUPAÇÃO (mesma semântica: verde vivo → marrom). */
+const occupiedStopsDark: { light: string; base: string; label: string }[] = [
+  { light: '#57663F', base: '#495632', label: 'Em pastejo' },
+  { light: '#626A44', base: '#525A38', label: 'Pastejo 8–14d' },
+  { light: '#6E6442', base: '#5D5335', label: 'Pastejo 15–21d' },
+  { light: '#65523A', base: '#53422D', label: 'Pastejo 22d+' },
+];
+
+/** Stops noturnos de DESCANSO (marrom → verde profundo, como no tema claro). */
+const restStopsDark: { light: string; base: string; label: string }[] = [
+  { light: '#65523A', base: '#53422D', label: 'Recém-liberado' },
+  { light: '#6E6442', base: '#5D5335', label: 'Rebrotando' },
+  { light: '#5D6C44', base: '#4C5A36', label: 'Descansado' },
+  { light: '#50603A', base: '#3F4E2C', label: 'Pronto' },
 ];
 
 export const gameTokens = {
@@ -131,8 +183,10 @@ const SEASONAL: Record<Season, SeasonalOverride> = {
   },
 };
 
-/** Cores do tabuleiro tingidas pela estação do ano (só cor; geometria intacta). */
-export function seasonalColors(season: Season): typeof baseColors {
+/** Cores do tabuleiro tingidas pela estação do ano (só cor; geometria intacta).
+ *  No tema escuro vale a paleta noturna fixa — as estações tingem só o claro. */
+export function seasonalColors(season: Season, dark = false): typeof baseColors {
+  if (dark) return darkColors;
   return { ...baseColors, ...SEASONAL[season] };
 }
 
@@ -151,13 +205,21 @@ function seasonalStops<T extends { light: string; base: string; label: string }>
 }
 
 /** Faixas do gradiente de OCUPAÇÃO (verde → marrom) tingidas pela estação. */
-export function seasonalOccupiedStops(season: Season): typeof occupiedStopsBase {
+export function seasonalOccupiedStops(season: Season, dark = false): typeof occupiedStopsBase {
+  if (dark) return occupiedStopsDark;
   const override = SEASONAL[season];
   return seasonalStops(occupiedStopsBase, override.occupiedLight, override.occupiedBase);
 }
 
 /** Faixas do gradiente de DESCANSO (marrom → verde) tingidas pela estação. */
-export function seasonalRestStops(season: Season): typeof restStopsBase {
+export function seasonalRestStops(season: Season, dark = false): typeof restStopsBase {
+  if (dark) return restStopsDark;
   const override = SEASONAL[season];
   return seasonalStops(restStopsBase, override.restLight, override.restBase);
+}
+
+/** Cores base do tabuleiro no tema atual — sprites e camadas consomem daqui
+ *  (reativo: re-renderiza quando a classe `dark` do <html> muda). */
+export function useBoardColors(): typeof baseColors {
+  return useDarkMode() ? darkColors : baseColors;
 }

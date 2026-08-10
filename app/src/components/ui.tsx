@@ -31,7 +31,7 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={`bg-paper-card rounded-2xl border border-black/5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${className}`}>
+    <div className={`bg-paper-card rounded-2xl border border-ink/5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${className}`}>
       {children}
     </div>
   );
@@ -212,16 +212,16 @@ export function Field({
 }
 
 export const inputCls =
-  "w-full rounded-xl border border-black/10 bg-white px-3.5 py-2.5 text-base tnum outline-none focus:border-pasture-500 focus:ring-2 focus:ring-pasture-100 transition";
+  "w-full rounded-xl border border-ink/10 bg-paper-card px-3.5 py-2.5 text-base tnum outline-none focus:border-pasture-500 focus:ring-2 focus:ring-pasture-100 transition";
 
 /** Linha selecionável de listas em folhas (ex.: escolha de lote/pasto). */
 export const rowCls = (selected: boolean, disabled: boolean) =>
   `w-full flex items-center justify-between gap-2 rounded-xl border px-3.5 py-3 text-left min-h-[44px] transition ${
     disabled
-      ? "border-black/5 bg-paper-sunken opacity-60"
+      ? "border-ink/5 bg-paper-sunken opacity-60"
       : selected
         ? "border-pasture-500 bg-pasture-50 ring-1 ring-pasture-500"
-        : "border-black/10 bg-white hover:border-pasture-200"
+        : "border-ink/10 bg-paper-card hover:border-pasture-200"
   }`;
 
 export function Button({
@@ -278,14 +278,14 @@ export function Sheet({
     <div className="fixed inset-0 z-[1100] flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-ink/40 animate-overlay" onClick={onClose} />
       <div className="relative w-full sm:max-w-md bg-paper-card rounded-t-3xl sm:rounded-2xl max-h-[88vh] flex flex-col safe-bottom animate-sheet">
-        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-black/5">
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-ink/5">
           <h3 className="font-semibold">{title}</h3>
           <button onClick={onClose} className="p-2 -mr-2 text-ink-soft" aria-label="Fechar">
             <X size={20} />
           </button>
         </div>
         <div className="overflow-y-auto px-5 py-4 flex-1">{children}</div>
-        {footer && <div className="px-5 py-4 border-t border-black/5">{footer}</div>}
+        {footer && <div className="px-5 py-4 border-t border-ink/5">{footer}</div>}
       </div>
     </div>
   );

@@ -130,7 +130,7 @@ export function ComparacaoIndividual() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-black/5 text-left text-xs text-ink-faint">
+                <tr className="border-b border-ink/5 text-left text-xs text-ink-faint">
                   <th className="font-medium px-4 md:px-5 py-3">Animal</th>
                   <th className="font-medium px-3 py-3 hidden sm:table-cell">
                     Lote atual
@@ -166,7 +166,7 @@ export function ComparacaoIndividual() {
                   return (
                     <tr
                       key={l.animalId}
-                      className={`border-b border-black/5 last:border-0 ${
+                      className={`border-b border-ink/5 last:border-0 ${
                         insuficiente ? "opacity-55" : ""
                       }`}
                     >
@@ -205,7 +205,7 @@ export function ComparacaoIndividual() {
           </div>
         )}
 
-        <div className="border-t border-black/5">
+        <div className="border-t border-ink/5">
           <button
             type="button"
             onClick={() => setComoAberto((v) => !v)}

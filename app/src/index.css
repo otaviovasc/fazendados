@@ -5,6 +5,56 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Paleta como variáveis CSS (triplas RGB, consumidas pelo tailwind.config com
+   <alpha-value>). Tons quentes: nada de branco ou preto puros. O tema escuro
+   é ativado pela classe `dark` no <html> (ver theme.ts e index.html). */
+:root {
+  color-scheme: light;
+  --paper: 250 247 241; /* #FAF7F1 */
+  --paper-sunken: 243 238 229; /* #F3EEE5 */
+  --paper-card: 253 251 246; /* #FDFBF6 */
+  --ink: 28 25 23; /* #1C1917 */
+  --ink-soft: 87 83 78; /* #57534E */
+  --ink-faint: 168 162 158; /* #A8A29E */
+  --pasture-50: 240 245 239; /* #F0F5EF */
+  --pasture-100: 220 232 218; /* #DCE8DA */
+  --pasture-200: 183 209 180; /* #B7D1B4 */
+  --pasture-500: 62 107 66; /* #3E6B42 */
+  --pasture-600: 47 82 51; /* #2F5233 */
+  --pasture-700: 38 66 41; /* #264229 */
+  --pasture-900: 24 41 27; /* #18291B */
+  --review-100: 251 238 211; /* #FBEED3 */
+  --review-500: 180 83 9; /* #B45309 */
+  --review-700: 146 64 14; /* #92400E */
+  --danger-100: 251 228 228; /* #FBE4E4 */
+  --danger-600: 185 28 28; /* #B91C1C */
+}
+
+/* Tema escuro: marrons profundos e tinta off-white quente; card um pouco mais
+   claro que o fundo, sunken um pouco mais escuro. Verdes/âmbares/vermelhos
+   mantêm o matiz e sobem de brilho para ler sobre o fundo escuro. */
+:root.dark {
+  color-scheme: dark;
+  --paper: 23 20 15; /* #17140F */
+  --paper-sunken: 16 14 10; /* #100E0A */
+  --paper-card: 33 29 22; /* #211D16 */
+  --ink: 237 232 221; /* #EDE8DD */
+  --ink-soft: 187 179 165; /* #BBB3A5 */
+  --ink-faint: 134 125 111; /* #867D6F */
+  --pasture-50: 28 36 27; /* #1C241B */
+  --pasture-100: 37 51 37; /* #253325 */
+  --pasture-200: 56 79 58; /* #384F3A */
+  --pasture-500: 96 140 100; /* #608C64 */
+  --pasture-600: 79 126 83; /* #4F7E53 */
+  --pasture-700: 143 180 147; /* #8FB493 */
+  --pasture-900: 16 27 18; /* #101B12 */
+  --review-100: 58 42 16; /* #3A2A10 */
+  --review-500: 196 101 24; /* #C46518 */
+  --review-700: 227 168 96; /* #E3A860 */
+  --danger-100: 61 27 27; /* #3D1B1B */
+  --danger-600: 224 102 102; /* #E06666 */
+}
+
 @layer base {
   html {
     -webkit-font-smoothing: antialiased;
@@ -72,6 +122,25 @@
   font-family: inherit;
 }
 
+/* Modo escuro: tiles esmaecidos e controles do Leaflet na paleta do tema. */
+.dark .leaflet-tile {
+  filter: brightness(0.8) saturate(0.75);
+}
+.dark .leaflet-container {
+  background: rgb(var(--paper-sunken));
+}
+.dark .leaflet-bar a {
+  background: rgb(var(--paper-card));
+  color: rgb(var(--ink-soft));
+  border-bottom-color: rgb(var(--ink) / 0.1);
+}
+.dark .leaflet-control-layers {
+  background: rgb(var(--paper-card));
+  color: rgb(var(--ink));
+  border-color: rgb(var(--ink) / 0.1);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.4);
+}
+
 /* ---------- Jogo (/jogo — Tabuleiro da Fazenda) ---------- */
 /* Moldura full-bleed: escapa do padding/max-width do conteúdo e ocupa a
    viewport entre o topo e a navegação inferior (mobile) ou a sidebar (md+). */
@@ -97,7 +166,7 @@
   width: 100%;
   height: 100%;
   touch-action: none; /* o pan/pinça é hand-rolled: o navegador não intercepta */
-  background: #faf7f1; /* paper — a "mesa" sob o diorama */
+  background: rgb(var(--paper)); /* a "mesa" sob o diorama */
   user-select: none;
 }
 
@@ -114,12 +183,12 @@
   width: 2.75rem;
   height: 2.75rem;
   border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgb(0 0 0 / 0.06);
+  background: rgb(var(--paper-card) / 0.92);
+  border: 1px solid rgb(var(--ink) / 0.06);
   box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
   font-size: 1.25rem;
   font-weight: 600;
-  color: #57534e;
+  color: rgb(var(--ink-soft));
   display: grid;
   place-items: center;
 }
@@ -134,7 +203,7 @@
 .game-installation:focus-visible > path:first-child,
 .game-installation:focus-visible > rect:first-child,
 .game-installation:focus-visible > circle:first-child {
-  stroke: #3e6b42;
+  stroke: rgb(var(--pasture-500));
   stroke-width: 2.5;
 }
 
@@ -142,9 +211,9 @@
 .game-installation-label {
   font-size: 17px;
   font-weight: 600;
-  fill: #1c1917;
+  fill: rgb(var(--ink));
   paint-order: stroke;
-  stroke: rgba(250, 247, 241, 0.85);
+  stroke: rgb(var(--paper) / 0.85);
   stroke-width: 3.5;
   text-anchor: middle;
 }
@@ -155,7 +224,7 @@
 .game-badge-text {
   font-size: 15px;
   font-weight: 700;
-  fill: #1c1917;
+  fill: rgb(var(--ink));
   text-anchor: middle;
   dominant-baseline: central;
 }

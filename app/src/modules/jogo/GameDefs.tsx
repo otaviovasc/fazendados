@@ -1,3 +1,4 @@
+import { useDarkMode } from '../../theme';
 import type { Season } from './tokens';
 import { seasonalColors, seasonalOccupiedStops, seasonalRestStops } from './tokens';
 
@@ -5,12 +6,13 @@ import { seasonalColors, seasonalOccupiedStops, seasonalRestStops } from './toke
  * <defs> compartilhados do mapa: gradientes dos pastos (ocupação: verde →
  * marrom; descanso: marrom → verde — 2 stops cada), textura de tufos de capim
  * e a sombra única do diorama. Ids são globais no SVG do jogo. A paleta vem
- * da estação do ano (hemisfério sul) via `season`.
+ * da estação do ano (hemisfério sul) via `season` e do tema claro/escuro.
  */
 export function GameDefs({ season }: { season: Season }) {
-  const colors = seasonalColors(season);
-  const occupiedStops = seasonalOccupiedStops(season);
-  const restStops = seasonalRestStops(season);
+  const dark = useDarkMode();
+  const colors = seasonalColors(season, dark);
+  const occupiedStops = seasonalOccupiedStops(season, dark);
+  const restStops = seasonalRestStops(season, dark);
   const { meadowEdge, ink, grass, grassLight } = colors;
   return <defs>
     {occupiedStops.map((stop, index) => <linearGradient key={`occupied-${index}`} id={`game-pasture-occupied-${index}`} x1="0" y1="0" x2="0.35" y2="1">

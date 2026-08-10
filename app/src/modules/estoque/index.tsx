@@ -84,7 +84,7 @@ export default function EstoquePage() {
         </Card>
       ) : (
         <Card>
-          <ul className="divide-y divide-black/5">
+          <ul className="divide-y divide-ink/5">
             {state.feedItems.map((item) => (
               <FeedItemRow key={item.id} item={item} />
             ))}
@@ -159,13 +159,13 @@ function FeedItemRow({ item }: { item: FeedItem }) {
       </button>
 
       {open && (
-        <div className="px-4 md:px-5 pb-3 pt-1 border-t border-black/5 bg-paper-sunken/40">
+        <div className="px-4 md:px-5 pb-3 pt-1 border-t border-ink/5 bg-paper-sunken/40">
           {movements.length === 0 ? (
             <p className="text-sm text-ink-soft py-2">
               Nenhuma movimentação registrada.
             </p>
           ) : (
-            <ul className="divide-y divide-black/5">
+            <ul className="divide-y divide-ink/5">
               {movements.map((m) => (
                 <li key={m.id} className="flex items-center gap-3 py-2.5">
                   <span
@@ -557,7 +557,7 @@ function FeedingEventSheet({ open, onClose }: { open: boolean; onClose: () => vo
 
         <div>
           <SectionTitle>Itens do trato</SectionTitle>
-          <div className="divide-y divide-black/5 border-y border-black/5">
+          <div className="divide-y divide-ink/5 border-y border-ink/5">
             {rows.map((row, idx) => {
               const parsed = parseDecimal(row.qty);
               const item = state.feedItems.find((i) => i.id === row.itemId);
@@ -581,7 +581,7 @@ function FeedingEventSheet({ open, onClose }: { open: boolean; onClose: () => vo
                       ))}
                     </select>
                     <input
-                      className="w-24 shrink-0 rounded-xl border border-black/10 bg-white px-3 py-2.5 text-base tnum outline-none focus:border-pasture-500 focus:ring-2 focus:ring-pasture-100 transition"
+                      className="w-24 shrink-0 rounded-xl border border-ink/10 bg-paper-card px-3 py-2.5 text-base tnum outline-none focus:border-pasture-500 focus:ring-2 focus:ring-pasture-100 transition"
                       inputMode="decimal"
                       value={row.qty}
                       onChange={(e) => setRow(idx, { qty: e.target.value })}

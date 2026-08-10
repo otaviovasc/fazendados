@@ -197,20 +197,20 @@ function GraficoMedicao({ dias }: { dias: DiaMedido[] }) {
         <div className="h-44 -mx-1">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={dados} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid vertical={false} stroke="rgba(0,0,0,0.06)" />
+              <CartesianGrid vertical={false} stroke="rgb(var(--ink) / 0.06)" />
               <XAxis
                 dataKey="label"
                 tickLine={false}
                 axisLine={false}
                 minTickGap={24}
-                tick={{ fontSize: 11, fill: "#A8A29E" }}
+                tick={{ fontSize: 11, fill: "rgb(var(--ink-faint))" }}
               />
               <YAxis
                 width={36}
                 tickLine={false}
                 axisLine={false}
                 domain={["auto", "auto"]}
-                tick={{ fontSize: 11, fill: "#A8A29E" }}
+                tick={{ fontSize: 11, fill: "rgb(var(--ink-faint))" }}
                 tickFormatter={(v: number) => String(Math.round(v))}
               />
               <Tooltip
@@ -229,9 +229,9 @@ function GraficoMedicao({ dias }: { dias: DiaMedido[] }) {
               <Line
                 type="monotone"
                 dataKey="total"
-                stroke="#2F5233"
+                stroke="rgb(var(--pasture-600))"
                 strokeWidth={2}
-                dot={{ r: 3, fill: "#2F5233", strokeWidth: 0 }}
+                dot={{ r: 3, fill: "rgb(var(--pasture-600))", strokeWidth: 0 }}
                 activeDot={{ r: 4.5 }}
                 isAnimationActive={false}
               />
@@ -293,7 +293,7 @@ function DesempenhoCard({ animalId }: { animalId: string }) {
             <div className="mt-4">
               <GraficoMedicao dias={dias} />
             </div>
-            <ul className="mt-3 divide-y divide-black/5">
+            <ul className="mt-3 divide-y divide-ink/5">
               {[...dias].reverse().map((d) => (
                 <li key={d.date} className="py-2 text-sm">
                   <div className="flex items-baseline justify-between gap-3">
@@ -767,7 +767,7 @@ function LinhaDoTempo({ animalId }: { animalId: string }) {
             hint="Lotações, Controles leiteiros e registros de histórico aparecem aqui."
           />
         ) : (
-          <ul className="divide-y divide-black/5">
+          <ul className="divide-y divide-ink/5">
             {items.map((it) => {
               const Icon = kindIcon[it.kind];
               return (

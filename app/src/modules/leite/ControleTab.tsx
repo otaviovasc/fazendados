@@ -73,7 +73,7 @@ function DayNavigator({
     <div className="flex items-center gap-1 mb-4">
       <button
         onClick={() => onChange(addDays(date, -1))}
-        className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-xl bg-paper-card border border-black/5 text-ink-soft hover:bg-pasture-100"
+        className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-xl bg-paper-card border border-ink/5 text-ink-soft hover:bg-pasture-100"
         aria-label="Dia anterior"
       >
         <ChevronLeft size={18} />
@@ -95,7 +95,7 @@ function DayNavigator({
       <button
         onClick={() => onChange(addDays(date, 1))}
         disabled={date >= t}
-        className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-xl bg-paper-card border border-black/5 text-ink-soft hover:bg-pasture-100 disabled:opacity-40"
+        className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-xl bg-paper-card border border-ink/5 text-ink-soft hover:bg-pasture-100 disabled:opacity-40"
         aria-label="Próximo dia"
       >
         <ChevronRight size={18} />
@@ -202,7 +202,7 @@ function GroupCard({
       {expanded && (
         <>
           {/* Totais por turno + ação de registrar */}
-          <div className="px-4 py-3 md:px-5 border-b border-black/5 space-y-2">
+          <div className="px-4 py-3 md:px-5 border-b border-ink/5 space-y-2">
         {shifts.map((sh, i) => {
           const session = sessions[i];
           const total = session ? sessionTotal(state, session.id) : null;
@@ -265,7 +265,7 @@ function GroupCard({
             ))}
           </div>
 
-          <div className="divide-y divide-black/5">
+          <div className="divide-y divide-ink/5">
             {animals.map((a) => (
               <div
                 key={a.id}
@@ -399,7 +399,7 @@ function QuickEntrySheet({
           setValue(ev.target.value);
           setError(null);
         }}
-        className="w-full rounded-2xl border border-black/10 bg-white px-4 py-5 text-3xl font-semibold tnum text-center outline-none focus:border-pasture-500 focus:ring-2 focus:ring-pasture-100 transition"
+        className="w-full rounded-2xl border border-ink/10 bg-paper-card px-4 py-5 text-3xl font-semibold tnum text-center outline-none focus:border-pasture-500 focus:ring-2 focus:ring-pasture-100 transition"
         aria-label={`Medição individual de ${animal.name} em litros`}
       />
       <p className="text-center text-sm text-ink-soft mt-2">
@@ -551,7 +551,7 @@ function MeasurementScreen({
           placeholder="0,0"
           value={value}
           onChange={(ev) => setValue(ev.target.value)}
-          className="w-full rounded-2xl border border-black/10 bg-white px-4 py-5 text-3xl font-semibold tnum text-center outline-none focus:border-pasture-500 focus:ring-2 focus:ring-pasture-100 transition"
+          className="w-full rounded-2xl border border-ink/10 bg-paper-card px-4 py-5 text-3xl font-semibold tnum text-center outline-none focus:border-pasture-500 focus:ring-2 focus:ring-pasture-100 transition"
           aria-label={`Medição individual de ${animal.name} em litros`}
         />
         <p className="text-center text-sm text-ink-soft mt-2 mb-5">
@@ -714,7 +714,7 @@ export default function ControleTab() {
           — <span className="tnum">{measured} de {rows.length} animais medidos</span>
         </p>
 
-        <div className="divide-y divide-black/5 mb-5">
+        <div className="divide-y divide-ink/5 mb-5">
           {rows.map(
             (r) =>
               r && (

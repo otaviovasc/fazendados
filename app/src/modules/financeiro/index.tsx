@@ -80,7 +80,7 @@ export default function FinanceiroPage() {
                 hint="Não há lançamentos aguardando Liquidação."
               />
             ) : (
-              <ul className="divide-y divide-black/5">
+              <ul className="divide-y divide-ink/5">
                 {pending.map((e) => (
                   <EntryRow
                     key={e.id}
@@ -107,7 +107,7 @@ export default function FinanceiroPage() {
                 hint="Lançamentos liquidados aparecem aqui e compõem o Resultado de caixa."
               />
             ) : (
-              <ul className="divide-y divide-black/5">
+              <ul className="divide-y divide-ink/5">
                 {settled.map((e) => (
                   <EntryRow key={e.id} entry={e} />
                 ))}
@@ -304,8 +304,8 @@ function NewEntrySheet({ open, onClose }: { open: boolean; onClose: () => void }
               className={`rounded-lg py-2.5 text-sm font-semibold transition min-h-[44px] ${
                 kind === k
                   ? k === "receita"
-                    ? "bg-white shadow-sm text-pasture-700"
-                    : "bg-white shadow-sm text-danger-600"
+                    ? "bg-paper-card shadow-sm text-pasture-700"
+                    : "bg-paper-card shadow-sm text-danger-600"
                   : "text-ink-soft"
               }`}
             >

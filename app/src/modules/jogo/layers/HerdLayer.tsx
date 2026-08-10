@@ -6,7 +6,7 @@ import type { GameProjection } from '../../../domain/game/projection';
 import type { FarmState, HerdGroup, Pasture, PastureOccupancy } from '../../../domain/types';
 import { animalsInGroup } from '../../../state/store';
 import { CowSprite } from '../sprites/CowSprite';
-import { gameTokens } from '../tokens';
+import { gameTokens, useBoardColors } from '../tokens';
 
 export type HerdCluster = {
   group: HerdGroup;
@@ -28,7 +28,8 @@ export function HerdLayer({ state, projection, onSelect, didDrag }: {
   /** true quando o último gesto foi arrasto (pan) — o click é suprimido. */
   didDrag?: () => boolean;
 }) {
-  const { colors, herdClusterCap, motion } = gameTokens;
+  const { herdClusterCap, motion } = gameTokens;
+  const colors = useBoardColors();
   const clusters = useMemo(() => {
     const groupById = new Map(state.groups.map((group) => [group.id, group]));
     return state.pastures.flatMap((pasture: Pasture) => {
@@ -94,7 +95,7 @@ export function HerdLayer({ state, projection, onSelect, didDrag }: {
         </g>;
       })}
       <g data-testid={`herd-count-${cluster.group.id}`} transform={`translate(${badgeAnchor.x} ${badgeAnchor.y})`} pointerEvents="none">
-        <rect x="-26" y="-12" width="52" height="24" rx="12" fill="#fffef9" stroke={colors.meadowEdge} strokeWidth="1" />
+        <rect x="-26" y="-12" width="52" height="24" rx="12" fill="rgb(var(--paper-card))" stroke={colors.meadowEdge} strokeWidth="1" />
         <text className="game-badge-text" y="1">{cluster.animalCount} 🐄</text>
       </g>
     </g>)}

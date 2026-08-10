@@ -218,7 +218,7 @@ export default function InicioPage() {
             <Link
               key={to}
               to={to}
-              className="bg-paper-card rounded-2xl border border-black/5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-4 flex items-center gap-3 min-h-[64px] hover:border-pasture-500/40 transition"
+              className="bg-paper-card rounded-2xl border border-ink/5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-4 flex items-center gap-3 min-h-[64px] hover:border-pasture-500/40 transition"
             >
               <span className="flex items-center justify-center w-11 h-11 rounded-xl bg-pasture-100 text-pasture-600 shrink-0">
                 <Icon size={20} />
@@ -247,19 +247,19 @@ export default function InicioPage() {
                 >
                   <CartesianGrid
                     vertical={false}
-                    stroke="#1C1917"
+                    stroke="rgb(var(--ink))"
                     strokeOpacity={0.06}
                   />
                   <XAxis
                     dataKey="label"
                     tickLine={false}
                     axisLine={false}
-                    tick={{ fontSize: 11, fill: "#A8A29E" }}
+                    tick={{ fontSize: 11, fill: "rgb(var(--ink-faint))" }}
                   />
                   <YAxis
                     tickLine={false}
                     axisLine={false}
-                    tick={{ fontSize: 11, fill: "#A8A29E" }}
+                    tick={{ fontSize: 11, fill: "rgb(var(--ink-faint))" }}
                     width={42}
                   />
                   <Tooltip
@@ -277,12 +277,12 @@ export default function InicioPage() {
                   <Area
                     type="monotone"
                     dataKey="liters"
-                    stroke="#2F5233"
+                    stroke="rgb(var(--pasture-600))"
                     strokeWidth={2}
-                    fill="#DCE8DA"
+                    fill="rgb(var(--pasture-100))"
                     fillOpacity={0.6}
                     connectNulls={false}
-                    dot={{ r: 2.5, fill: "#2F5233", strokeWidth: 0 }}
+                    dot={{ r: 2.5, fill: "rgb(var(--pasture-600))", strokeWidth: 0 }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -296,7 +296,7 @@ export default function InicioPage() {
         {/* ---------- Lotes nos pastos ---------- */}
         <section>
           <SectionTitle>Lotes nos pastos</SectionTitle>
-          <Card className="divide-y divide-black/5">
+          <Card className="divide-y divide-ink/5">
             {state.groups.map((g) => {
               const pasture = pastureOfGroup(state, g.id);
               const occ = openOccupancy(state, g.id);
@@ -338,7 +338,7 @@ export default function InicioPage() {
       {/* ---------- Atividade recente ---------- */}
       <section>
         <SectionTitle>Atividade recente</SectionTitle>
-        <Card className="divide-y divide-black/5">
+        <Card className="divide-y divide-ink/5">
           {recentAudit.length === 0 && (
             <div className="px-4 py-6 flex flex-col items-center text-center">
               <Sun size={20} className="text-ink-faint mb-2" />
