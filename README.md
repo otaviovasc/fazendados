@@ -2,7 +2,9 @@
 
 A dairy-farm operations system built around an AI assistant as the primary
 data-entry surface — with a hard rule: **AI-proposed data is never a confirmed
-fact until a human confirms it.**
+fact until a human confirms it.** It is the V2 of
+[sitio-cafezinho](https://github.com/otaviovasc/sitio-cafezinho), a simpler
+internal app built for the same family farm.
 
 > Versão em português no final deste arquivo.
 
