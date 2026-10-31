@@ -15,7 +15,7 @@ const envSchema = z.object({
   // Sem esta variável, toda a superfície /api/admin permanece desativada.
   ADMIN_PASSWORD: z.preprocess(
     (value) => value === '' ? undefined : value,
-    z.string().min(20, 'ADMIN_PASSWORD precisa ter pelo menos 20 caracteres.').max(200).optional(),
+    z.string().min(12, 'ADMIN_PASSWORD precisa ter pelo menos 12 caracteres.').max(200).optional(),
   ),
   OPENROUTER_API_KEY: z.preprocess((value) => value === '' ? undefined : value, z.string().min(1).optional()),
   OPENROUTER_BASE_URL: z.string().url().default('https://openrouter.ai/api/v1'),

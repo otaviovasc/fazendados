@@ -319,8 +319,9 @@ A rota `/admin` permite ao operador listar contas de todas as Fazendas e
 redefinir senhas por solicitação humana. O acesso administrativo usa
 `ADMIN_PASSWORD` exclusiva no ambiente do servidor, independente das contas
 operacionais; sem essa configuração, a API administrativa fica desativada.
-O segredo nunca é enviado ao bundle do navegador. A sessão administrativa
-é separada, curta e protegida por cookie httpOnly, com limite de tentativas
+O segredo aceita de 12 a 200 caracteres e nunca é enviado ao bundle do
+navegador. A sessão administrativa é separada, curta e protegida por cookie
+httpOnly, com limite de tentativas
 de entrada e proteção contra requisições de outros sites.
 
 A redefinição resolve a Fazenda pela conta selecionada no banco e, em uma

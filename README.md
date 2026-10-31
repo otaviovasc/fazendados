@@ -66,6 +66,12 @@ pnpm dev        # api + web together
 Useful scripts: `pnpm db:reset`, `pnpm typecheck`, `pnpm check`
 (typecheck + production build), `pnpm start` (serve the production build).
 
+For password recovery, set `ADMIN_PASSWORD` to an exclusive password of 12–200
+characters in the server environment (or `app/.env` locally), restart the API,
+and open `/admin`. The panel lets the administrator reset any user's password
+and ends that user's existing sessions. An empty or unset variable disables
+the admin API. Keep the secret server-side; never prefix it with `VITE_`.
+
 ## Status
 
 V1 in active development. Scope: identity & farm, animals and lots, farm map
