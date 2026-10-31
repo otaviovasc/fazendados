@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import {
+  Brush,
   CartesianGrid,
   Line,
   LineChart,
@@ -253,6 +254,67 @@ function MonthChart({ month }: { month: string }) {
   );
 }
 
+function YearChart() {
+  const { state } = useFarm();
+  const years = Array.from(new Set([today().slice(0, 4), ...state.productions.map((record) => record.date.slice(0, 4))])).sort().reverse();
+  const [year, setYear] = useState(years[0]);
+  return <Card className="p-4 mb-5"><label className="block max-w-48 mb-4"><span className="block text-sm font-medium mb-1">Gráfico por ano</span><select className={inputCls} value={year} onChange={(event) => setYear(event.target.value)}>{years.map((value) => <option key={value}>{value}</option>)}</select></label><YearSeries key={year} year={year} /></Card>;
+}
+
+function YearSeries({ year }: { year: string }) {
+  const { state } = useFarm();
+  const data = useMemo(() => Array.from({ length: 12 }, (_, month) => calendarGrid(`${year}-${String(month + 1).padStart(2, "0")}-01`).filter((date): date is string => date !== null).map((date) => ({ date, total: productionFor(state, date)?.liters ?? null }))).flat(), [state, year]);
+  const [range, setRange] = useState({ startIndex: 0, endIndex: data.length - 1 });
+  const visible = data.slice(range.startIndex, range.endIndex + 1);
+  const measured = visible.filter((day) => day.total !== null);
+  // Somente Produção diária confirmada; consultas não escrevem fatos.
+  const total = measured.reduce((sum, day) => sum + (day.total ?? 0), 0);
+  const peak = measured.reduce<(typeof measured)[number] | null>((best, day) =>
+    best === null || (day.total ?? 0) > (best.total ?? 0) ? day : best, null);
+  const elapsed = visible.filter((day) => day.date <= today());
+  const covered = elapsed.filter((day) => day.total !== null).length;
+  const coverage = elapsed.length > 0 ? Math.round(covered / elapsed.length * 100) : null;
+  const indicators = [
+    { label: "Volume registrado", value: measured.length ? formatLiters(total) : "—", detail: "Soma dos dias com registro" },
+    { label: "Média diária", value: measured.length ? formatLiters(total / measured.length) : "—", detail: `${measured.length} dias com registro` },
+    { label: "Maior produção diária", value: peak ? formatLiters(peak.total ?? 0) : "—", detail: peak ? formatDay(peak.date) : "Nenhum registro no intervalo" },
+    { label: "Cobertura de dados", value: coverage === null ? "—" : `${coverage}%`, detail: `${covered} de ${elapsed.length} dias até hoje` },
+  ];
+  function move(direction: number) {
+    const width = range.endIndex - range.startIndex;
+    const startIndex = Math.max(0, Math.min(data.length - 1 - width, range.startIndex + direction * Math.max(1, Math.round(width / 2))));
+    setRange({ startIndex, endIndex: startIndex + width });
+  }
+  const tick = (date: string) => `${date.slice(8)}/${date.slice(5, 7)}`;
+  return <>
+    <p className="text-xs text-ink-soft mb-2">Indicadores do intervalo selecionado</p>
+    <dl className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+      {indicators.map((indicator) => <div key={indicator.label} className="rounded-2xl border border-ink/5 bg-paper-sunken p-3 md:p-4 min-w-0">
+        <dt className="text-xs text-ink-soft">{indicator.label}</dt>
+        <dd className="text-xl md:text-2xl font-semibold tnum text-pasture-700 mt-2 break-words">{indicator.value}</dd>
+        <dd className="text-xs text-ink-faint mt-1">{indicator.detail}</dd>
+      </div>)}
+    </dl>
+    <div className="flex flex-wrap gap-2 mb-3">
+      <Button variant="secondary" onClick={() => move(-1)} disabled={range.startIndex === 0}>← Anterior</Button>
+      {[30, 90, 180].map((days) => <Button key={days} variant="secondary" onClick={() => setRange({ startIndex: range.startIndex, endIndex: Math.min(data.length - 1, range.startIndex + days - 1) })}>{days} dias</Button>)}
+      <Button variant="secondary" onClick={() => setRange({ startIndex: 0, endIndex: data.length - 1 })}>Ano inteiro</Button>
+      <Button variant="secondary" onClick={() => move(1)} disabled={range.endIndex === data.length - 1}>Próximo →</Button>
+    </div>
+    <p className="text-xs text-ink-soft mb-3">{formatDay(visible[0].date)} a {formatDay(visible[visible.length - 1].date)} · Arraste a faixa inferior para navegar e suas extremidades para ampliar.</p>
+    <div className="h-72 md:h-80"><ResponsiveContainer width="100%" height="100%"><LineChart data={data} margin={{ top: 8, right: 12, bottom: 8, left: 0 }}>
+      <CartesianGrid vertical={false} stroke="rgb(var(--ink) / 0.06)" />
+      <XAxis dataKey="date" tickFormatter={tick} minTickGap={32} tick={{ fontSize: 11 }} />
+      <YAxis width={45} domain={["auto", "auto"]} tick={{ fontSize: 11 }} />
+      <Tooltip labelFormatter={(label) => formatDay(String(label))} formatter={(value) => [typeof value === "number" ? formatLiters(value) : "Sem medição", "Produção diária"]} />
+      <Line type="monotone" dataKey="total" stroke="rgb(var(--pasture-600))" strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls={false} isAnimationActive={false} />
+      <Brush dataKey="date" height={44} stroke="rgb(var(--pasture-600))" startIndex={range.startIndex} endIndex={range.endIndex} tickFormatter={tick} onChange={(next) => { if (next.startIndex !== undefined && next.endIndex !== undefined) setRange({ startIndex: next.startIndex, endIndex: next.endIndex }); }} />
+    </LineChart></ResponsiveContainer></div>
+    <p className="text-sm text-ink-soft mt-3">{measured.length} de {visible.length} dias medidos{measured.length ? ` · média: ${formatLiters(measured.reduce((sum, day) => sum + (day.total ?? 0), 0) / measured.length)}` : " · Nenhuma produção neste intervalo."}</p>
+    <p className="text-xs text-ink-faint mt-1">Dias sem medição aparecem como lacunas.</p>
+  </>;
+}
+
 export default function ProducaoTab() {
   const { state } = useFarm();
   const [month, setMonth] = useState(() => startOfMonth(today()));
@@ -301,6 +363,7 @@ export default function ProducaoTab() {
 
       <SuccessNotice message={notice} onDismiss={() => setNotice(null)} />
 
+      <YearChart />
       <Card className="overflow-hidden">
         <MonthCalendar
           month={month}

@@ -172,6 +172,8 @@ export type FactOrigin = "manual" | "assistente";
 /** Tipo do original anexado a uma Captura; bytes vivem no storage privado. */
 export type AssistantCaptureAttachmentKind = "audio" | "imagem" | "documento";
 export type AssistantAttachmentCategory =
+  | "producao_diaria"
+  | "coleta"
   | "controle_leiteiro"
   | "comprovante"
   | "nota_fiscal"

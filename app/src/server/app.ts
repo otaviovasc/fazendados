@@ -83,7 +83,7 @@ async function captureWithAttachments(farmId: string, captureId: string) {
   return { capture, attachments };
 }
 
-const attachmentCategorySchema = z.enum(['controle_leiteiro', 'comprovante', 'nota_fiscal', 'financeiro', 'mapa', 'outro']);
+const attachmentCategorySchema = z.enum(['controle_leiteiro', 'producao_diaria', 'coleta', 'comprovante', 'nota_fiscal', 'financeiro', 'mapa', 'outro']);
 const attachmentName = (name: string) => name.replace(/[\\/\0]/g, '').trim().slice(0, 180) || 'Arquivo sem nome';
 
 export function createApp() {

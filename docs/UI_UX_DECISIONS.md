@@ -79,6 +79,25 @@ A pessoa sempre sabe em qual estado está:
   (“Mimosa — sem medição na tarde”) com resolução em um toque.
 - Medição em litros com 1 casa decimal; teclado decimal no campo.
 
+## Galeria e Captura em lote
+
+- A Galeria mostra contagens por categoria, busca e ordenação por data ou nome.
+  A seleção de vários arquivos permite categorizar e reutilizar no Assistente
+  sem repetir a operação para cada foto.
+- O envio manual aceita vários arquivos e aplica a categoria escolhida. No
+  Assistente, a classificação pode seguir o tipo de Proposta reconhecido ou
+  uma categoria escolhida pela pessoa. Produção diária, Controle leiteiro e
+  Coleta têm categorias próprias; categoria organiza o Anexo, não confirma fatos.
+- Cada foto do lote cria sua própria Captura. Um contexto comum opcional informa
+  Lote, data e turno do Controle leiteiro, ou a data da Produção diária. Fotos
+  com contextos diferentes usam identificação pelo Assistente ou lotes separados.
+- O progresso e os erros aparecem por arquivo; tentar novamente preserva a
+  Captura já criada e não reprocessa os itens concluídos.
+- Fotos podem ser ampliadas em tela cheia, com zoom, na Galeria, na preparação
+  do lote e na Revisão. Fechar a imagem mantém os campos da Revisão.
+- Propostas continuam sendo revisadas e confirmadas individualmente na fila.
+  Enviar ou classificar um lote nunca confirma registros automaticamente.
+
 ## Regras transversais de apresentação
 
 - **Ausência ≠ zero:** dia ou turno sem medição aparece como lacuna, nunca como

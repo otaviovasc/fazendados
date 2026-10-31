@@ -28,6 +28,7 @@ const intentSchema = z.discriminatedUnion('type', [
     type: z.literal('daily_milk_total'),
     ...common,
     scopeLabel: z.string().nullable(),
+    totalLiters: nullableNumber,
     morningLiters: nullableNumber,
     afternoonLiters: nullableNumber,
     rawValueText: z.string(),
@@ -91,7 +92,7 @@ const intentSchema = z.discriminatedUnion('type', [
   }),
 ]);
 
-const interpretationSchema = z.object({ intents: z.array(intentSchema).min(1).max(8) });
+const interpretationSchema = z.object({ intents: z.array(intentSchema).min(1).max(31) });
 type Intent = z.infer<typeof intentSchema>;
 
 export type AssistantProposalInput = {
@@ -128,7 +129,7 @@ Regras invioláveis:
 
 const ACTIONS = `Tipos de intent suportados. O campo type é obrigatório em cada intent:
 
-1) type: "daily_milk_total": produção diária da Fazenda. Campos: type, date, scopeLabel, morningLiters, afternoonLiters, rawValueText, confidence, notes.
+1) type: "daily_milk_total": produção diária da Fazenda. Campos: type, date, scopeLabel, totalLiters, morningLiters, afternoonLiters, rawValueText, confidence, notes. Informe o volume único do dia em totalLiters; não invente divisão por turno. scopeLabel é null quando o registro é da Fazenda. Se apenas volumes de turnos foram explicitamente informados, use morningLiters/afternoonLiters e deixe totalLiters null. Para páginas mensais, produza uma intent por data, até 31, preservando valores ilegíveis como null.
 2) type: "individual_milk_session": controle leiteiro. Campos: type, date, scopeLabel, period, measurements[], confidence, notes. Cada medição tem animalLabel, morningLiters, afternoonLiters, totalLiters, rawValueText, confidence, notes. Para “Leite por vaca”, preserve cada linha no padrão “animal - volume” e só aceite volumes de 0 a 100 L com 1 casa decimal (vírgula ou ponto).
 3) type: "milk_collection": coleta. Campos: type, date, liters, time, sourceLabel, rawValueText, confidence, notes.
 4) type: "revenue": receita. Campos: type, date, categoryLabel, description, amount, received, dueDate, confidence, notes.
@@ -201,7 +202,7 @@ function toProposal(intent: Intent, context: AssistantContext): AssistantProposa
   const date = dateField(intent.date, issues);
   if (intent.type === 'daily_milk_total') {
     const values = [intent.morningLiters, intent.afternoonLiters].filter((value): value is number => value !== null);
-    const liters = values.length ? values.reduce((sum, value) => sum + value, 0) : null;
+    const liters = intent.totalLiters ?? (values.length ? values.reduce((sum, value) => sum + value, 0) : null);
     if (liters === null) issues.push('Volume não informado — preencha na Revisão.');
     if (intent.scopeLabel) issues.push('Produção diária é da Fazenda; a menção ao Lote foi preservada para conferência.');
     if (intent.notes) issues.push(intent.notes);
@@ -429,7 +430,7 @@ function normalizeModelIntent(value: unknown): unknown {
   }
 
   if (type === 'daily_milk_total') {
-    return { ...common, scopeLabel: typeof intent.scopeLabel === 'string' ? intent.scopeLabel : null, morningLiters: nullableModelNumber(intent.morningLiters), afternoonLiters: nullableModelNumber(intent.afternoonLiters), rawValueText: typeof intent.rawValueText === 'string' ? intent.rawValueText : '' };
+    return { ...common, scopeLabel: typeof intent.scopeLabel === 'string' ? intent.scopeLabel : null, totalLiters: nullableModelNumber(intent.totalLiters), morningLiters: nullableModelNumber(intent.morningLiters), afternoonLiters: nullableModelNumber(intent.afternoonLiters), rawValueText: typeof intent.rawValueText === 'string' ? intent.rawValueText : '' };
   }
   if (type === 'milk_collection') {
     return { ...common, liters: nullableModelNumber(intent.liters), time: typeof intent.time === 'string' ? intent.time : null, sourceLabel: typeof intent.sourceLabel === 'string' ? intent.sourceLabel : null, rawValueText: typeof intent.rawValueText === 'string' ? intent.rawValueText : '' };

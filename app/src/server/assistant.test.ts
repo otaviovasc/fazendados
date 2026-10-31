@@ -14,6 +14,37 @@ import {
 } from '../db/schema.js';
 import type { AuthContext } from './auth.js';
 
+test('interpreta uma página mensal de totais diários sem exigir turnos', async () => {
+  process.env.DATABASE_URL ??= 'postgresql://test:test@127.0.0.1:5432/test';
+  process.env.OPENROUTER_API_KEY = 'test-key';
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  try {
+    const { interpretAssistantCapture } = await import('./assistant.js');
+    globalThis.fetch = async () => {
+      calls += 1;
+      return Response.json({ choices: [{ message: { content: JSON.stringify({
+        intents: Array.from({ length: 31 }, (_, index) => ({
+          type: 'daily_milk_total',
+          date: { relative: null, iso: `2026-10-${String(index + 1).padStart(2, '0')}`, rawText: String(index + 1) },
+          totalLiters: index === 30 ? null : '1588',
+          morningLiters: null, afternoonLiters: null,
+          scopeLabel: null, rawValueText: index === 30 ? '[ilegível]' : '1588', confidence: 'HIGH', notes: null,
+        })),
+      }) } }] });
+    };
+    const proposals = await interpretAssistantCapture('Totais diários de outubro de 2026', { groups: [], animals: [], feedItems: [] });
+    assert.equal(calls, 1);
+    assert.equal(proposals.length, 31);
+    assert.ok(proposals.every((proposal) => proposal.kind === 'producao_diaria'));
+    assert.equal(proposals[0].fields.find((field) => field.key === 'liters')?.value, '1588');
+    assert.equal(proposals[30].fields.find((field) => field.key === 'liters')?.value, '');
+    assert.ok(proposals[30].issues.some((issue) => issue.includes('Volume não informado')));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('interpreta medição individual quando o LLM devolve litros como texto OCR', async () => {
   process.env.DATABASE_URL ??= 'postgresql://test:test@127.0.0.1:5432/test';
   process.env.OPENROUTER_API_KEY = 'test-key';

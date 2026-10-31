@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ImageViewer } from "../../components/ImageViewer";
 import {
   AlertTriangle,
   Beef,
@@ -159,6 +160,7 @@ export function ReviewSheet({
   const [rows, setRows] = useState<RowReview[] | null>(() =>
     proposal ? initRows(proposal, state.animals) : null
   );
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [dismissing, setDismissing] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -606,6 +608,7 @@ export function ReviewSheet({
 
   return (
     <div className="fixed inset-0 z-[1100] bg-paper flex flex-col animate-sheet">
+      {imageUrl && <ImageViewer src={imageUrl} alt="Foto original da Captura" onClose={() => setImageUrl(null)} />}
       {/* Cabeçalho */}
       <header className="flex items-center gap-2 px-4 py-3 border-b border-ink/5 bg-paper-card shrink-0">
         <button
@@ -650,16 +653,10 @@ export function ReviewSheet({
                 </div>
               </div>
               {capture && captureImageReferences(capture).map((id) => (
-                <details key={id} className="mt-3">
-                  <summary className="cursor-pointer text-xs font-medium text-pasture-700">
-                    Ver foto original
-                  </summary>
-                  <img
-                    src={captureAttachmentUrl(capture.id, id)}
-                    alt="Foto original da Captura"
-                    className="mt-2 max-h-80 w-full rounded-xl border border-ink/10 object-contain bg-ink/[0.02]"
-                  />
-                </details>
+                <button key={id} type="button" onClick={() => setImageUrl(captureAttachmentUrl(capture.id, id))} className="mt-3 block w-full text-left rounded-xl border border-ink/10 overflow-hidden">
+                  <img src={captureAttachmentUrl(capture.id, id)} alt="Foto original da Captura — toque para ampliar" className="w-full max-h-[55vh] object-contain bg-paper-sunken" />
+                  <span className="block min-h-11 px-3 py-3 text-sm font-medium text-pasture-700">Ampliar foto original</span>
+                </button>
               ))}
             </div>
           </section>

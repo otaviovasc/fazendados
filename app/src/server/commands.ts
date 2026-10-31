@@ -206,7 +206,7 @@ export const actionSchema = z.discriminatedUnion('type', [
     type: z.literal('UpdateAssistantAttachment'),
     attachmentId: z.string().min(1),
     name: z.string().trim().min(1).max(180),
-    category: z.enum(['controle_leiteiro', 'comprovante', 'nota_fiscal', 'financeiro', 'mapa', 'outro']),
+    category: z.enum(['controle_leiteiro', 'producao_diaria', 'coleta', 'comprovante', 'nota_fiscal', 'financeiro', 'mapa', 'outro']),
   }),
   z.object({
     type: z.literal('DeleteAssistantAttachment'),

@@ -1,36 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
-  AudioLines,
-  Camera,
   CheckCircle2,
-  ImagePlus,
-  Images,
   Inbox,
-  LoaderCircle,
-  Send,
-  Sparkles,
-  Trash2,
   X,
 } from "lucide-react";
-import type { AssistantCapture, AssistantCaptureAttachment, AssistantProposal } from "../../domain/types";
+import type { AssistantProposal } from "../../domain/types";
 import { captureOf, pendingProposals, useFarm } from "../../state/store";
-import {
-  createAssistantTextCapture,
-  interpretPersistedAssistantCapture,
-  readAssistantPhoto,
-  uploadAssistantPhoto,
-} from "../../state/api";
 import {
   Button,
   Card,
   Chip,
   EmptyState,
   FactNatureChip,
-  InlineError,
   PageHeader,
   SectionTitle,
-  Sheet,
   inputCls,
 } from "../../components/ui";
 import { ReviewSheet } from "./ReviewSheet";
@@ -45,6 +29,7 @@ import {
   sortAssistantHistory,
 } from "./helpers";
 import { Link, useNavigate } from "react-router-dom";
+import { BulkCaptureComposer } from "./BulkCaptureComposer";
 
 interface Toast {
   message: string;
@@ -54,25 +39,13 @@ type PendingFilter = "todas" | "com_pendencias";
 type PendingSort = "antigas" | "pendencias";
 
 export default function AssistentePage() {
-  const { state, dispatch, syncAssistantInterpretation } = useFarm();
+  const { state } = useFarm();
   const navigate = useNavigate();
-  const [text, setText] = useState("");
-  const [photo, setPhoto] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [photoCaptureId, setPhotoCaptureId] = useState<string | null>(null);
-  const [photoStage, setPhotoStage] = useState<"idle" | "uploading" | "reading" | "interpreting">("idle");
-  const [storedAttachment, setStoredAttachment] = useState<AssistantCaptureAttachment | null>(null);
-  const [galleryOpen, setGalleryOpen] = useState(false);
-  const [photoError, setPhotoError] = useState<string | null>(null);
   const [reviewId, setReviewId] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
-  const [interpreting, setInterpreting] = useState(false);
-  const [interpretError, setInterpretError] = useState<string | null>(null);
   const [correctionTarget, setCorrectionTarget] = useState<CorrectionTarget | null>(null);
   const [pendingFilter, setPendingFilter] = useState<PendingFilter>("todas");
   const [pendingSort, setPendingSort] = useState<PendingSort>("antigas");
-  const cameraInput = useRef<HTMLInputElement>(null);
-  const galleryInput = useRef<HTMLInputElement>(null);
 
   const pending = useMemo(() => {
     const filtered = pendingProposals(state).filter((proposal) => {
@@ -90,130 +63,6 @@ export default function AssistentePage() {
     });
   }, [state, pendingFilter, pendingSort]);
   const history = sortAssistantHistory(state, state.proposals);
-  const savedAttachments = state.captures.flatMap((capture) => (capture.attachments ?? []).filter((attachment) => !attachment.deletedAt));
-  const storedNeedsText = Boolean(storedAttachment && storedAttachment.kind !== "imagem" && !text.trim());
-
-  const submit = async () => {
-    const t = text.trim();
-    if (!t || interpreting) return;
-    setInterpreting(true);
-    setInterpretError(null);
-    try {
-      const capture = await createAssistantTextCapture(t);
-      const result = await interpretPersistedAssistantCapture(capture.id);
-      syncAssistantInterpretation(result);
-      setText("");
-    } catch (error) {
-      setInterpretError(error instanceof Error ? error.message : "Não foi possível gerar a Proposta.");
-    } finally {
-      setInterpreting(false);
-    }
-  };
-
-  const clearPhoto = () => {
-    if (photoPreview) URL.revokeObjectURL(photoPreview);
-    setPhoto(null);
-    setPhotoPreview(null);
-    setPhotoCaptureId(null);
-    setPhotoError(null);
-    setPhotoStage("idle");
-    setStoredAttachment(null);
-  };
-
-  const selectStoredAttachment = (attachment: AssistantCaptureAttachment) => {
-    if (photoPreview) URL.revokeObjectURL(photoPreview);
-    setPhoto(null);
-    setPhotoPreview(null);
-    setPhotoCaptureId(null);
-    setStoredAttachment(attachment);
-    setPhotoError(null);
-    setGalleryOpen(false);
-    setPhotoStage("idle");
-  };
-
-  const choosePhoto = (file: File | undefined) => {
-    if (!file) return;
-    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
-      setPhotoError("Escolha uma foto JPEG, PNG ou WEBP.");
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      setPhotoError("A foto precisa ter no máximo 10 MB.");
-      return;
-    }
-    if (photoPreview) URL.revokeObjectURL(photoPreview);
-    setPhoto(file);
-    setPhotoPreview(URL.createObjectURL(file));
-    setPhotoCaptureId(null);
-    setPhotoError(null);
-    setPhotoStage("idle");
-  };
-
-  const submitPhoto = async () => {
-    if (!photo || photoStage !== "idle") return;
-    setPhotoError(null);
-    try {
-      let captureId = photoCaptureId;
-      let needsRead = true;
-      if (!captureId) {
-        setPhotoStage("uploading");
-        const capture = await uploadAssistantPhoto(photo, text);
-        captureId = capture.id;
-        needsRead = capture.extractedText === null;
-        setPhotoCaptureId(captureId);
-      }
-      // OCR é uma etapa explícita da foto, mesmo com uma observação digitada.
-      // Em erro, a mesma foto/captura fica disponível para retry sem upload.
-      if (needsRead) {
-        setPhotoStage("reading");
-        await readAssistantPhoto(captureId);
-      }
-      setPhotoStage("interpreting");
-      const result = await interpretPersistedAssistantCapture(captureId);
-      syncAssistantInterpretation(result);
-      setText("");
-      clearPhoto();
-    } catch (error) {
-      setPhotoError(error instanceof Error ? error.message : "Não foi possível ler a foto.");
-      setPhotoStage("idle");
-    }
-  };
-
-  const submitStoredAttachment = async () => {
-    if (!storedAttachment || photoStage !== "idle") return;
-    if (storedNeedsText) {
-      setPhotoError("Para reutilizar PDF ou áudio, escreva uma observação no campo acima para o Assistente interpretar.");
-      return;
-    }
-    setPhotoError(null);
-    try {
-      setPhotoStage("uploading");
-      const outcome = await dispatch({
-        type: "CreateAssistantCaptureFromAttachment",
-        attachmentId: storedAttachment.id,
-        text: text.trim() || undefined,
-      });
-      if (!outcome.ok) throw new Error(outcome.message);
-      const capture = (outcome.result as { capture: AssistantCapture }).capture;
-      syncAssistantInterpretation({ capture, proposals: [] });
-      if (storedAttachment.kind === "imagem" && !capture.extractedText) {
-        setPhotoStage("reading");
-        await readAssistantPhoto(capture.id);
-      }
-      setPhotoStage("interpreting");
-      const result = await interpretPersistedAssistantCapture(capture.id);
-      syncAssistantInterpretation(result);
-      setText("");
-      clearPhoto();
-    } catch (error) {
-      setPhotoError(error instanceof Error ? error.message : "Não foi possível usar o arquivo.");
-      setPhotoStage("idle");
-    }
-  };
-
-  useEffect(() => () => {
-    if (photoPreview) URL.revokeObjectURL(photoPreview);
-  }, [photoPreview]);
 
   // Fila: após a Confirmação, avança para a próxima Proposta pendente.
   const handleConfirmed = (confirmed: AssistantProposal, summary: string) => {
@@ -246,133 +95,7 @@ export default function AssistentePage() {
         <FactNatureChip nature="registro" />
       </div>
 
-      {/* Composer de Captura */}
-      <Card className="p-4 md:p-5 mb-8">
-        <div className="flex items-center gap-2 mb-3">
-          <Sparkles size={16} className="text-pasture-600" />
-          <span className="text-sm font-semibold">Nova captura</span>
-          <span className="ml-auto">
-            <FactNatureChip nature="captura" />
-          </span>
-        </div>
-        <textarea
-          className="w-full rounded-xl border border-ink/10 bg-paper-card px-3.5 py-2.5 text-base outline-none focus:border-pasture-500 focus:ring-2 focus:ring-pasture-100 transition min-h-24"
-          placeholder="Ex.: hoje a produção foi 348 litros e meio"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          aria-label="Texto da captura"
-        />
-        <input
-          ref={cameraInput}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          capture="environment"
-          className="sr-only"
-          aria-label="Tirar foto da anotação ou comprovante"
-          onChange={(e) => {
-            choosePhoto(e.target.files?.[0]);
-            e.currentTarget.value = "";
-          }}
-        />
-        <input
-          ref={galleryInput}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          className="sr-only"
-          aria-label="Escolher foto da galeria"
-          onChange={(e) => {
-            choosePhoto(e.target.files?.[0]);
-            e.currentTarget.value = "";
-          }}
-        />
-        {photoPreview ? (
-          <div className="mt-3 rounded-2xl border border-ink/10 bg-ink/[0.02] p-3">
-            <div className="flex gap-3 items-start">
-              <img
-                src={photoPreview}
-                alt="Prévia da foto selecionada"
-                className="size-20 rounded-xl object-cover border border-ink/10"
-              />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium truncate">{photo?.name}</p>
-                <p className="text-xs text-ink-faint mt-0.5">
-                  {photo ? `${Math.ceil(photo.size / 1024)} KB` : "Foto pronta para envio"}
-                </p>
-                <p className="text-xs text-ink-soft mt-2">
-                  A imagem será lida primeiro; a Proposta continua exigindo sua revisão.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={clearPhoto}
-                disabled={photoStage !== "idle"}
-                aria-label="Remover foto selecionada"
-                className="min-h-[44px] min-w-[44px] grid place-items-center rounded-xl text-ink-soft hover:bg-ink/5 disabled:opacity-50"
-              >
-                <Trash2 size={17} />
-              </button>
-            </div>
-          </div>
-        ) : storedAttachment ? (
-          <div className="mt-3 rounded-2xl border border-ink/10 bg-ink/[0.02] p-3">
-            <div className="flex gap-3 items-center">
-              <div className="size-20 rounded-xl bg-paper-sunken grid place-items-center text-ink-faint shrink-0">
-                {storedAttachment.kind === "imagem" ? <img src={captureAttachmentUrl(storedAttachment.captureId, storedAttachment.id)} alt={storedAttachment.name ?? "Arquivo salvo"} className="size-full object-cover rounded-xl" /> : storedAttachment.kind === "audio" ? <AudioLines size={26} /> : <Images size={26} />}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium truncate">{storedAttachment.name ?? "Arquivo salvo"}</p>
-                <p className="text-xs text-ink-soft mt-1">Arquivo salvo na Galeria · será reutilizado como nova Captura.</p>
-              </div>
-              <button type="button" onClick={clearPhoto} disabled={photoStage !== "idle"} aria-label="Remover arquivo salvo" className="min-h-[44px] min-w-[44px] grid place-items-center rounded-xl text-ink-soft hover:bg-ink/5 disabled:opacity-50"><Trash2 size={17} /></button>
-            </div>
-            {storedNeedsText && <p className="text-xs text-review-700 mt-2">PDFs e áudios são guardados como fonte; escreva uma observação acima para gerar a Proposta.</p>}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
-            <Button variant="secondary" type="button" onClick={() => cameraInput.current?.click()}>
-              <Camera size={16} /> Tirar foto
-            </Button>
-            <Button variant="secondary" type="button" onClick={() => galleryInput.current?.click()}>
-              <ImagePlus size={16} /> Galeria
-            </Button>
-            <Button variant="secondary" type="button" onClick={() => setGalleryOpen(true)}>
-              <Images size={16} /> Salvos
-            </Button>
-          </div>
-        )}
-        <p className="text-xs text-ink-faint mt-2">
-          Foto de anotação ou comprovante: JPEG, PNG ou WEBP, até 10 MB.
-        </p>
-        {interpretError && <div className="mt-3"><InlineError>{interpretError}</InlineError></div>}
-        {photoError && <div className="mt-3"><InlineError>{photoError}</InlineError></div>}
-        <div className="flex items-center gap-2 mt-3">
-          {(photo || storedAttachment) && (
-            <Button
-              variant="secondary"
-              disabled={photoStage !== "idle" || storedNeedsText}
-              onClick={() => void (photo ? submitPhoto() : submitStoredAttachment())}
-            >
-              {photoStage !== "idle" && <LoaderCircle size={15} className="animate-spin" />}
-              {photoStage === "uploading" ? "Preparando arquivo…" : photoStage === "reading" ? "Lendo arquivo…" : photoStage === "interpreting" ? "Interpretando…" : photoCaptureId ? "Tentar novamente" : "Usar arquivo"}
-            </Button>
-          )}
-          <Button
-            className="ml-auto"
-            disabled={!text.trim() || interpreting || photoStage !== "idle" || Boolean(photo) || Boolean(storedAttachment)}
-            onClick={submit}
-          >
-            <Send size={15} /> {interpreting ? "Interpretando…" : "Gerar proposta"}
-          </Button>
-        </div>
-      </Card>
-
-      <SavedAttachmentSheet
-        open={galleryOpen}
-        attachments={savedAttachments}
-        onClose={() => setGalleryOpen(false)}
-        onSelect={selectStoredAttachment}
-      />
-
+      <BulkCaptureComposer />
       <div className="grid gap-8 lg:grid-cols-2">
         {/* Propostas pendentes */}
         <section>
@@ -588,41 +311,5 @@ export default function AssistentePage() {
         </div>
       )}
     </div>
-  );
-}
-
-function SavedAttachmentSheet({
-  open,
-  attachments,
-  onClose,
-  onSelect,
-}: {
-  open: boolean;
-  attachments: AssistantCaptureAttachment[];
-  onClose: () => void;
-  onSelect: (attachment: AssistantCaptureAttachment) => void;
-}) {
-  return (
-    <Sheet open={open} onClose={onClose} title="Usar arquivo salvo">
-      {attachments.length === 0 ? (
-        <EmptyState icon={<Images size={28} />} title="Nenhum arquivo salvo" hint="Adicione fotos ou documentos na Galeria para reutilizá-los aqui." />
-      ) : (
-        <div className="space-y-2">
-          <p className="text-sm text-ink-soft mb-3">Escolha uma Captura já guardada. O arquivo será usado em uma nova Revisão.</p>
-          {attachments.map((attachment) => (
-            <button key={attachment.id} type="button" onClick={() => onSelect(attachment)} className="w-full flex items-center gap-3 rounded-xl border border-ink/5 p-3 text-left hover:bg-ink/[0.03] min-h-[64px]">
-              <div className="size-12 rounded-lg bg-paper-sunken grid place-items-center overflow-hidden shrink-0">
-                {attachment.kind === "imagem" ? <img src={captureAttachmentUrl(attachment.captureId, attachment.id)} alt="" className="size-full object-cover" /> : attachment.kind === "audio" ? <AudioLines size={21} className="text-ink-faint" /> : <Images size={21} className="text-ink-faint" />}
-              </div>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium truncate">{attachment.name ?? "Arquivo salvo"}</span>
-                <span className="block text-xs text-ink-faint mt-0.5">{attachment.kind === "imagem" ? "Imagem" : attachment.kind === "audio" ? "Áudio" : "Documento"}</span>
-              </span>
-              <ArrowRight size={16} className="text-ink-faint" />
-            </button>
-          ))}
-        </div>
-      )}
-    </Sheet>
   );
 }
