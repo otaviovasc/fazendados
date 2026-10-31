@@ -313,6 +313,22 @@ sem intervenção do usuário. O manifest usa o nome FazenDados e theme color
 dados: tiles de satélite (Esri) e arquivos de áudio em CacheFirst; chamadas a
 `/api` são NetworkOnly, pois dado operacional nunca deve ser servido de cache.
 
+### D-042 — Administração de recuperação de acesso
+
+A rota `/admin` permite ao operador listar contas de todas as Fazendas e
+redefinir senhas por solicitação humana. O acesso administrativo usa
+`ADMIN_PASSWORD` exclusiva no ambiente do servidor, independente das contas
+operacionais; sem essa configuração, a API administrativa fica desativada.
+O segredo nunca é enviado ao bundle do navegador. A sessão administrativa
+é separada, curta e protegida por cookie httpOnly, com limite de tentativas
+de entrada e proteção contra requisições de outros sites.
+
+A redefinição resolve a Fazenda pela conta selecionada no banco e, em uma
+transação, altera o hash scrypt, encerra as sessões operacionais da conta e
+registra auditoria com ator administrativo, sem armazenar senha ou hash na
+auditoria. Essa permissão global fica restrita às rotas administrativas;
+o escopo operacional continua vindo da sessão de cada Usuário.
+
 ## Pendentes
 
 | ID | Decisão | Recomendação atual |

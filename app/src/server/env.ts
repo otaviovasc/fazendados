@@ -12,6 +12,11 @@ const envSchema = z.object({
   // A API local usa 3001; o Vite encaminha /api para esta porta.
   PORT: z.coerce.number().int().positive().default(3001),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL não foi configurada.'),
+  // Sem esta variável, toda a superfície /api/admin permanece desativada.
+  ADMIN_PASSWORD: z.preprocess(
+    (value) => value === '' ? undefined : value,
+    z.string().min(20, 'ADMIN_PASSWORD precisa ter pelo menos 20 caracteres.').max(200).optional(),
+  ),
   OPENROUTER_API_KEY: z.preprocess((value) => value === '' ? undefined : value, z.string().min(1).optional()),
   OPENROUTER_BASE_URL: z.string().url().default('https://openrouter.ai/api/v1'),
   OPENROUTER_INTENT_MODEL: z.string().min(1).default('google/gemini-3.1-flash-lite'),

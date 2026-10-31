@@ -28,6 +28,7 @@ import { getPrivateImage, getPrivateObject, MAX_ATTACHMENT_BYTES, MAX_IMAGE_BYTE
 import { uid } from '../lib/prng.js';
 import { errorType, logger } from './logger.js';
 import { toCapture, toProposal } from './mappers.js';
+import { createAdminRouter } from './admin.js';
 
 /** String JSON canônica (chaves ordenadas) — base da comparação de idempotência. */
 function canonicalize(value: unknown): string {
@@ -180,6 +181,9 @@ export function createApp() {
     const state = await loadFarmState(getDb(), auth.farm.id);
     return c.json({ authenticated: true, state });
   });
+
+  // Administração usa autenticação própria e deve ser montada antes da sessão da Fazenda.
+  app.route('/api/admin', createAdminRouter());
 
   // ---------- autenticado ----------
 
