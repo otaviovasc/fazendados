@@ -25,6 +25,7 @@ import {
 import { formatLiters, parseDecimal } from "../../lib/format";
 import {
   addDays,
+  startOfMonth,
   formatLong,
   formatRelativeDay,
   formatWeekday,
@@ -33,6 +34,8 @@ import {
 import { uid } from "../../lib/prng";
 import type { FarmState, HerdGroup, MilkingShift } from "../../domain/types";
 import { measurementIn, sessionFor, sessionTotal, shiftsOf } from "./utils";
+
+import { MonthCalendar } from "./MonthCalendar";
 
 type Wizard =
   | { step: "dia" }
@@ -646,6 +649,20 @@ export default function ControleTab() {
   const [date, setDate] = useState(
     initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? initialDate : today(),
   );
+  const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(date));
+  const measurementDates = useMemo(() => {
+    const measuredSessions = new Set(state.measurements.map((measurement) => measurement.sessionId));
+    const counts = new Map<string, number>();
+    for (const session of state.sessions) {
+      if (measuredSessions.has(session.id)) counts.set(session.date, (counts.get(session.date) ?? 0) + 1);
+    }
+    return counts;
+  }, [state.sessions, state.measurements]);
+  const lastMeasurementDate = [...measurementDates.keys()].sort().at(-1);
+  function navigateDate(next: string) {
+    setDate(next);
+    setCalendarMonth(startOfMonth(next));
+  }
   const [controlFilter, setControlFilter] = useState<ControlFilter>("todos");
   const [controlSort, setControlSort] = useState<ControlSort>("lote");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
@@ -831,7 +848,20 @@ export default function ControleTab() {
   // ----- Visão do dia: um cartão por Lote -----
   return (
     <div>
-      <DayNavigator date={date} onChange={setDate} />
+      <Card className="p-4 mb-4">
+        <p className="text-xs text-ink-soft">Última medição individual</p>
+        <div className="flex flex-wrap items-center justify-between gap-2 mt-1">
+          <p className="font-semibold">{lastMeasurementDate ? formatLong(lastMeasurementDate) : "Nenhuma medição registrada"}</p>
+          {lastMeasurementDate && <Button variant="secondary" onClick={() => navigateDate(lastMeasurementDate)}>Ver última medição</Button>}
+        </div>
+      </Card>
+      <DayNavigator date={date} onChange={navigateDate} />
+      <details className="rounded-2xl border border-ink/5 bg-paper-card mb-4" open>
+        <summary className="px-4 py-3 min-h-[44px] cursor-pointer font-medium text-sm">Calendário de medições</summary>
+        <label className="block px-4 pb-2"><span className="block text-xs text-ink-soft mb-1">Ir direto para mês e ano</span><input type="month" className={inputCls} value={calendarMonth.slice(0, 7)} max={today().slice(0, 7)} onChange={(event) => { if (/^\d{4}-\d{2}$/.test(event.target.value) && event.target.value <= today().slice(0, 7)) setCalendarMonth(`${event.target.value}-01`); }} /></label>
+        <MonthCalendar month={calendarMonth} onMonthChange={setCalendarMonth} selectedDate={date} onDayPress={navigateDate} dayContent={(day) => measurementDates.has(day) ? { label: "●", heat: 0.18 } : null} dayAriaLabel={(day) => `${formatLong(day)} — ${measurementDates.has(day) ? "com medição" : "sem medição"}`} />
+        <p className="px-4 pb-3 text-xs text-ink-faint">● Dias com medição individual. Toque para abrir.</p>
+      </details>
 
       <SuccessNotice message={notice} onDismiss={() => setNotice(null)} />
 

@@ -23,6 +23,7 @@ import {
 } from "../../components/ui";
 import { formatLiters, parseDecimal } from "../../lib/format";
 import {
+  addDays,
   calendarGrid,
   formatDay,
   formatRelativeDay,
@@ -257,13 +258,21 @@ function MonthChart({ month }: { month: string }) {
 function YearChart() {
   const { state } = useFarm();
   const years = Array.from(new Set([today().slice(0, 4), ...state.productions.map((record) => record.date.slice(0, 4))])).sort().reverse();
-  const [year, setYear] = useState(years[0]);
-  return <Card className="p-4 mb-5"><label className="block max-w-48 mb-4"><span className="block text-sm font-medium mb-1">Gráfico por ano</span><select className={inputCls} value={year} onChange={(event) => setYear(event.target.value)}>{years.map((value) => <option key={value}>{value}</option>)}</select></label><YearSeries key={year} year={year} /></Card>;
+  const [year, setYear] = useState("todos");
+  return <Card className="p-4 mb-5"><label className="block max-w-48 mb-4"><span className="block text-sm font-medium mb-1">Gráfico por ano</span><select className={inputCls} value={year} onChange={(event) => setYear(event.target.value)}><option value="todos">Todo o período</option>{years.map((value) => <option key={value}>{value}</option>)}</select></label><YearSeries key={year} year={year} /></Card>;
 }
 
 function YearSeries({ year }: { year: string }) {
   const { state } = useFarm();
-  const data = useMemo(() => Array.from({ length: 12 }, (_, month) => calendarGrid(`${year}-${String(month + 1).padStart(2, "0")}-01`).filter((date): date is string => date !== null).map((date) => ({ date, total: productionFor(state, date)?.liters ?? null }))).flat(), [state, year]);
+  const data = useMemo(() => {
+    const dates = state.productions.map((record) => record.date).sort();
+    const first = year === "todos" ? dates[0] ?? today() : `${year}-01-01`;
+    const last = year === "todos" ? dates[dates.length - 1] ?? today() : `${year}-12-31`;
+    const rows: { date: string; total: number | null }[] = [];
+    const records = new Map(state.productions.map((record) => [record.date, record.liters]));
+    for (let day = first; day <= last; day = addDays(day, 1)) rows.push({ date: day, total: records.get(day) ?? null });
+    return rows;
+  }, [state.productions, year]);
   const [range, setRange] = useState({ startIndex: 0, endIndex: data.length - 1 });
   const visible = data.slice(range.startIndex, range.endIndex + 1);
   const measured = visible.filter((day) => day.total !== null);
@@ -298,7 +307,7 @@ function YearSeries({ year }: { year: string }) {
     <div className="flex flex-wrap gap-2 mb-3">
       <Button variant="secondary" onClick={() => move(-1)} disabled={range.startIndex === 0}>← Anterior</Button>
       {[30, 90, 180].map((days) => <Button key={days} variant="secondary" onClick={() => setRange({ startIndex: range.startIndex, endIndex: Math.min(data.length - 1, range.startIndex + days - 1) })}>{days} dias</Button>)}
-      <Button variant="secondary" onClick={() => setRange({ startIndex: 0, endIndex: data.length - 1 })}>Ano inteiro</Button>
+      <Button variant="secondary" onClick={() => setRange({ startIndex: 0, endIndex: data.length - 1 })}>{year === "todos" ? "Todo o período" : "Ano inteiro"}</Button>
       <Button variant="secondary" onClick={() => move(1)} disabled={range.endIndex === data.length - 1}>Próximo →</Button>
     </div>
     <p className="text-xs text-ink-soft mb-3">{formatDay(visible[0].date)} a {formatDay(visible[visible.length - 1].date)} · Arraste a faixa inferior para navegar e suas extremidades para ampliar.</p>
